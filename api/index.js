@@ -682,10 +682,11 @@ async function verifySchnorrSignature(payload, sigHex, pubkeyHex) {
       return b;
     }
 
-    const msgHash  = sha256(new TextEncoder().encode(deterministicStringify(payload)));
+    // Pass raw message bytes — schnorr internally hashes per BIP340
+    const msgBytes = new TextEncoder().encode(deterministicStringify(payload));
     const sigBytes = hexToBytes(sigHex);
     const pubBytes = hexToBytes(pubkeyHex).slice(0, 33);
-    return schnorr.verify(sigBytes, msgHash, pubBytes);
+    return schnorr.verify(sigBytes, msgBytes, pubBytes);
   } catch (e) {
     // If noble not installed or verification fails
     console.warn('Schnorr verify warning:', e.message);
@@ -954,7 +955,6 @@ body{font-family:'Lora',Georgia,serif;background:#f4f1e8;color:#1a1a2e;min-heigh
 
 <script type="module">
 import { schnorr } from 'https://esm.sh/@noble/curves@1.4.0/secp256k1';
-import { sha256 }  from 'https://esm.sh/@noble/hashes@1.4.0/sha256';
 
 // Use relative URLs — works on any domain (rxverify.co.uk or www.rxverify.co.uk)
 const API   = '';
@@ -1030,11 +1030,11 @@ async function run() {
   let sigValid = false;
   try {
     if(sig && rx.prescriber?.pubkey) {
-      const canonStr = deterministicStringify(canonical);
-      const msgHash  = sha256(new TextEncoder().encode(canonStr));
+      // Pass raw message bytes — schnorr internally hashes per BIP340
+      const msgBytes = new TextEncoder().encode(deterministicStringify(canonical));
       const sigBytes = hexB(sig);
       const pubBytes = hexB(rx.prescriber.pubkey).slice(0,33);
-      sigValid = schnorr.verify(sigBytes, msgHash, pubBytes);
+      sigValid = schnorr.verify(sigBytes, msgBytes, pubBytes);
     }
   } catch(e) { sigValid = false; }
   checks.push({ label:'Cryptographic signature', ok:sigValid, value:sigValid?'Valid secp256k1/Schnorr/SHA-256':'✗ INVALID — do not dispense' });
