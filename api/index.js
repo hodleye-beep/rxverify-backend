@@ -73,7 +73,13 @@ app.post('/api/prescriptions', async (req, res) => {
     // ── Hash the canonical payload ──
     // Strip sig fields AND prescription_id (added after signing, not part of signed data)
     const { sig_optometrist, sig_practice, prescription_id: _pid, ...canonicalPayload } = payload;
-    const payloadHash = sha256hex(JSON.stringify(canonicalPayload));
+    const canonicalStr = JSON.stringify(canonicalPayload);
+    const payloadHash = sha256hex(canonicalStr);
+
+    // DEBUG: log first 200 chars of canonical string to help diagnose hash mismatches
+    console.log('STORE canonical keys:', Object.keys(canonicalPayload));
+    console.log('STORE canonical preview:', canonicalStr.slice(0, 200));
+    console.log('STORE hash:', payloadHash);
 
     const { error } = await supabase
       .from('prescription_registry')
@@ -176,7 +182,16 @@ app.post('/api/verify', async (req, res) => {
     // ── 3. Hash match — confirms payload is unmodified ──
     // Strip sig fields AND prescription_id (same as when hash was stored)
     const { sig_optometrist, sig_practice, prescription_id: _pid2, ...canonicalPayload } = payload;
-    const presentedHash = sha256hex(JSON.stringify(canonicalPayload));
+    const verifyStr = JSON.stringify(canonicalPayload);
+    const presentedHash = sha256hex(verifyStr);
+
+    // DEBUG: log to compare with store
+    console.log('VERIFY canonical keys:', Object.keys(canonicalPayload));
+    console.log('VERIFY canonical preview:', verifyStr.slice(0, 200));
+    console.log('VERIFY presented hash:', presentedHash);
+    console.log('VERIFY stored hash:   ', record.payload_hash);
+    console.log('VERIFY match:', presentedHash === record.payload_hash);
+
     checks.hash_match   = presentedHash === record.payload_hash;
     checks.not_tampered = checks.hash_match;
     if (!checks.hash_match) {
@@ -297,6 +312,14 @@ app.post('/api/verify', async (req, res) => {
     if (!overallValid) {
       response.reason = warnings[0] || 'Verification failed';
     }
+
+    // DEBUG: include hash comparison in response temporarily
+    response._debug = {
+      presented_hash: presentedHash,
+      stored_hash: record.payload_hash,
+      canonical_keys: Object.keys(canonicalPayload),
+      canonical_preview: verifyStr.slice(0, 150)
+    };
 
     res.json(response);
 
@@ -1001,6 +1024,14 @@ async function run() {
       body: JSON.stringify({ short_code: CODE, payload: rx })
     });
     serverResult = await vResp.json();
+    // DEBUG: log server response to browser console
+    console.log('SERVER VERIFY RESULT:', serverResult);
+    if (serverResult._debug) {
+      console.log('DEBUG - presented hash:', serverResult._debug.presented_hash);
+      console.log('DEBUG - stored hash:   ', serverResult._debug.stored_hash);
+      console.log('DEBUG - keys:', serverResult._debug.canonical_keys);
+      console.log('DEBUG - preview:', serverResult._debug.canonical_preview);
+    }
     checks.push({ label:'Hash match (unmodified)', ok:serverResult.checks?.hash_match, value:serverResult.checks?.hash_match?'Confirmed unmodified':'Hash mismatch — may be altered' });
     checks.push({ label:'Prescriber in registry', ok:serverResult.checks?.prescriber_registered, value:serverResult.checks?.prescriber_registered ? (serverResult.prescriber?.goc||'')+'  ·  '+serverResult.prescriber?.name : 'Not in registry — verify GOC manually' });
     if(!serverResult.checks?.hash_match) allOk=false;
