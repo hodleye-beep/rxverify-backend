@@ -408,16 +408,28 @@ app.get('/api/registry/log', async (req, res) => {
 app.post('/api/send/email', async (req, res) => {
   try {
     const {
-      to_email, patient_name, short_code, practice_name,
+      to_email, patient_name, patient_dob, short_code, practice_name,
       prescriber_name, goc_number, issued_date, expires_date,
-      recall_date, rx_summary, pdf_base64
+      recall_date, rx_summary, pdf_base64, full_payload
     } = req.body;
 
     if (!to_email || !short_code) {
       return res.status(400).json({ error: 'to_email and short_code required' });
     }
 
-    const verifyLink = `${APP_URL}/v/${short_code}`;
+    // ── Encode full payload into URL fragment ──
+    // The # fragment is never sent to the server — browser decodes it locally
+    // This enables full verification with clinical data on the patient's device
+    let verifyLink = `${APP_URL}/v/${short_code}`;
+    if (full_payload) {
+      try {
+        const encoded = Buffer.from(JSON.stringify(full_payload)).toString('base64');
+        verifyLink = `${APP_URL}/v/${short_code}#${encoded}`;
+      } catch(e) {
+        console.warn('Could not encode payload for URL:', e.message);
+        // Fall back to link without payload — verification page shows metadata only
+      }
+    }
 
     const rxTableHtml = rx_summary ? `
       <table style="width:100%;border-collapse:collapse;margin:16px 0;font-family:'Courier New',monospace;font-size:13px;">
@@ -464,6 +476,7 @@ app.post('/api/send/email', async (req, res) => {
     <p style="margin:0 0 8px;font-family:'Courier New',monospace;font-size:9px;letter-spacing:0.2em;text-transform:uppercase;color:#005f73;">Prescription Summary</p>
     ${rxTableHtml}
     <table width="100%" style="font-family:'Courier New',monospace;font-size:11px;color:#8a8070;margin-top:12px;">
+      ${patient_dob ? `<tr><td style="padding:3px 0;width:160px;">Date of birth:</td><td style="color:#1a1a2e;">${patient_dob}</td></tr>` : ''}
       <tr><td style="padding:3px 0;width:160px;">Valid until:</td><td style="color:#1a1a2e;">${expires_date || '—'}</td></tr>
       <tr><td style="padding:3px 0;">Next sight test:</td><td style="color:#005f73;font-weight:600;">${recall_date || '—'}</td></tr>
       <tr><td style="padding:3px 0;">Issued by:</td><td style="color:#1a1a2e;">${prescriber_name || '—'} · GOC ${goc_number || '—'}</td></tr>
