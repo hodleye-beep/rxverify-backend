@@ -324,12 +324,14 @@ app.post('/api/verify', async (req, res) => {
       response.reason = warnings[0] || 'Verification failed';
     }
 
-    // DEBUG: include hash comparison in response temporarily
+    // DEBUG: include full canonical comparison in response
     response._debug = {
       presented_hash: presentedHash,
       stored_hash: record.payload_hash,
-      canonical_keys: Object.keys(canonicalPayload),
-      canonical_preview: verifyStr.slice(0, 150)
+      hashes_match: presentedHash === record.payload_hash,
+      canonical_keys: Object.keys(canonicalPayload).sort(),
+      canonical_full: verifyStr,
+      stored_short_code: record.short_code
     };
 
     res.json(response);
@@ -371,6 +373,16 @@ app.get('/api/verify/:code', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: 'Internal error' });
   }
+});
+
+// GET /api/debug/:code — returns stored hash details for comparison
+app.get('/api/debug/:code', async (req, res) => {
+  const { data } = await supabase
+    .from('prescription_registry')
+    .select('short_code, payload_hash, sig, prescriber_goc, issued_at')
+    .eq('short_code', req.params.code)
+    .single();
+  res.json({ stored: data });
 });
 
 // ═══════════════════════════════════════════════════════
