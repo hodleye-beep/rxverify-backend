@@ -1,0 +1,27 @@
+{
+  "name": "rxverify-backend",
+  "version": "2.0.0",
+  "description": "RxVerify API — Digital prescription verification infrastructure",
+  "main": "api/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "dev": "node api/index.js",
+    "start": "node api/index.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.24.0",
+    "@noble/curves": "^1.4.0",
+    "@noble/hashes": "^1.4.0",
+    "@supabase/supabase-js": "^2.43.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "pdf-lib": "^1.17.1",
+    "qrcode": "^1.5.4",
+    "resend": "^3.2.0",
+    "uuid": "^9.0.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
