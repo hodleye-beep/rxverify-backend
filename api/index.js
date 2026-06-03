@@ -462,6 +462,16 @@ app.post('/api/send/email', async (req, res) => {
       return res.status(400).json({ error: 'to_email and short_code required' });
     }
 
+    // ── Format DOB to UK date format ──
+    const formatDOB = (dob) => {
+      if (!dob) return null;
+      try {
+        const d = new Date(dob);
+        return d.toLocaleDateString('en-GB', { day:'2-digit', month:'2-digit', year:'numeric' });
+      } catch(e) { return dob; }
+    };
+    const displayDOB = formatDOB(patient_dob);
+
     // ── Encode full payload into URL fragment ──
     // The # fragment is never sent to the server — browser decodes it locally
     // This enables full verification with clinical data on the patient's device
@@ -521,7 +531,7 @@ app.post('/api/send/email', async (req, res) => {
     <p style="margin:0 0 8px;font-family:'Courier New',monospace;font-size:9px;letter-spacing:0.2em;text-transform:uppercase;color:#005f73;">Prescription Summary</p>
     ${rxTableHtml}
     <table width="100%" style="font-family:'Courier New',monospace;font-size:11px;color:#8a8070;margin-top:12px;">
-      ${patient_dob ? `<tr><td style="padding:3px 0;width:160px;">Date of birth:</td><td style="color:#1a1a2e;">${patient_dob}</td></tr>` : ''}
+      ${displayDOB ? `<tr><td style="padding:3px 0;width:160px;">Date of birth:</td><td style="color:#1a1a2e;">${displayDOB}</td></tr>` : ''}
       <tr><td style="padding:3px 0;width:160px;">Valid until:</td><td style="color:#1a1a2e;">${expires_date || '—'}</td></tr>
       <tr><td style="padding:3px 0;">Next sight test:</td><td style="color:#005f73;font-weight:600;">${recall_date || '—'}</td></tr>
       <tr><td style="padding:3px 0;">Issued by:</td><td style="color:#1a1a2e;">${prescriber_name || '—'} · GOC ${goc_number || '—'}</td></tr>
@@ -1031,6 +1041,7 @@ async function run() {
   document.getElementById('meta-grid').innerHTML =
     metaItem('Prescriber', rx.prescriber?.name||'—') +
     metaItem('GOC Registration', rx.prescriber?.goc||'—') +
+    (rx.patient?.display_dob ? metaItem('Date of Birth', new Date(rx.patient.display_dob).toLocaleDateString('en-GB')) : '') +
     metaItem('Valid Until', new Date(rx.expires_at*1000).toLocaleDateString('en-GB')) +
     metaItem('Test Type', rx.test_type?.replace('_',' ')||'Standard');
 
@@ -1054,21 +1065,34 @@ async function run() {
   document.getElementById('pdf-btn').onclick = async (e) => {
     e.preventDefault();
     const btn = e.target;
+    const origText = btn.textContent;
     btn.textContent = 'Generating…';
+    btn.style.opacity = '0.7';
     try {
       const r = await fetch(API+'/api/generate/pdf', {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ prescription: rx })
       });
+      if (!r.ok) throw new Error('Server error: ' + r.status);
       const d = await r.json();
       if(d.pdf_base64) {
         const a = document.createElement('a');
         a.href = 'data:application/pdf;base64,'+d.pdf_base64;
         a.download = 'prescription-'+CODE+'.pdf';
+        document.body.appendChild(a);
         a.click();
+        document.body.removeChild(a);
+        btn.textContent = '✓ Downloaded';
+        setTimeout(() => { btn.textContent = origText; btn.style.opacity = '1'; }, 2000);
+      } else {
+        throw new Error('No PDF returned');
       }
-    } catch(e) { alert('PDF generation failed — please try again'); }
-    btn.textContent = 'Download PDF';
+    } catch(err) {
+      console.error('PDF error:', err);
+      btn.textContent = 'Failed — tap to retry';
+      btn.style.opacity = '1';
+      setTimeout(() => { btn.textContent = origText; }, 3000);
+    }
   };
 }
 
