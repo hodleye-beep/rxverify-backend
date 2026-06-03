@@ -682,10 +682,10 @@ async function verifySchnorrSignature(payload, sigHex, pubkeyHex) {
       return b;
     }
 
-    // Pass raw message bytes — schnorr internally hashes per BIP340
+    // Schnorr BIP340: raw message bytes, x-only 32-byte public key
     const msgBytes = new TextEncoder().encode(deterministicStringify(payload));
     const sigBytes = hexToBytes(sigHex);
-    const pubBytes = hexToBytes(pubkeyHex).slice(0, 33);
+    const pubBytes = hexToBytes(pubkeyHex); // x-only 32-byte key
     return schnorr.verify(sigBytes, msgBytes, pubBytes);
   } catch (e) {
     // If noble not installed or verification fails
@@ -1030,10 +1030,10 @@ async function run() {
   let sigValid = false;
   try {
     if(sig && rx.prescriber?.pubkey) {
-      // Pass raw message bytes — schnorr internally hashes per BIP340
+      // Schnorr BIP340: raw message bytes, x-only 32-byte public key
       const msgBytes = new TextEncoder().encode(deterministicStringify(canonical));
       const sigBytes = hexB(sig);
-      const pubBytes = hexB(rx.prescriber.pubkey).slice(0,33);
+      const pubBytes = hexB(rx.prescriber.pubkey); // x-only 32-byte key (64 hex chars)
       sigValid = schnorr.verify(sigBytes, msgBytes, pubBytes);
     }
   } catch(e) { sigValid = false; }
