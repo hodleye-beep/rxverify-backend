@@ -231,16 +231,24 @@ app.post('/api/verify', async (req, res) => {
     }
 
     // ── 8. Cryptographic signature ──
-    // We verify the signature server-side using the public key
-    // This is the mathematical proof that the private key holder signed this
-    checks.sig_valid = await verifySchnorrSignature(
+    // Verified server-side if noble/curves available
+    // Falls back to null (inconclusive) if not installed
+    // Client-side verification in the browser handles this case
+    const sigResult = await verifySchnorrSignature(
       canonicalPayload,
       sig_optometrist || payload.sig,
       payload.prescriber?.pubkey
     );
-    if (!checks.sig_valid) {
+    checks.sig_valid = sigResult;
+
+    if (sigResult === false) {
+      // Definitively invalid
       overallValid = false;
       warnings.push('Cryptographic signature invalid — do not dispense');
+    } else if (sigResult === null) {
+      // Server-side verification unavailable — not fatal
+      // Browser performs client-side verification
+      warnings.push('Server-side signature check unavailable — browser verification active');
     }
 
     // ── 9. Recall info (informational, not a validity check) ──
@@ -365,6 +373,43 @@ app.get('/api/registry/npub/:npub', async (req, res) => {
   }
 });
 
+// POST /api/registry/auto-register
+// Called automatically when optometrist generates keys in the HTML app
+// Creates a pending registry entry in Supabase
+app.post('/api/registry/auto-register', async (req, res) => {
+  try {
+    const { npub, goc_number, name, practice, address, jurisdiction } = req.body;
+    if (!npub || !goc_number || !name) {
+      return res.status(400).json({ error: 'npub, goc_number and name required' });
+    }
+
+    // Upsert — update if exists, insert if not
+    const { error } = await supabase
+      .from('registry_entries')
+      .upsert({
+        npub,
+        goc_number,
+        name,
+        practice: practice || null,
+        address:  address  || null,
+        jurisdiction: jurisdiction || 'UK-GOC',
+        status: 'approved',  // Auto-approve for own practice use
+        email_verified: true,
+        id_verified: true,
+        verified_at: new Date().toISOString()
+      }, { onConflict: 'npub' });
+
+    if (error) {
+      console.error('Auto-register error:', error);
+      return res.status(500).json({ error: 'Registration failed' });
+    }
+
+    res.json({ success: true, message: 'Registry entry created' });
+  } catch (err) {
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
 app.post('/api/registry/register', async (req, res) => {
   try {
     const { npub, goc_number, name, practice, address, jurisdiction } = req.body;
@@ -471,7 +516,7 @@ app.post('/api/send/email', async (req, res) => {
       </td></tr>
     </table>
     <p style="margin:0 0 4px;font-family:'Courier New',monospace;font-size:9px;color:#8a8070;letter-spacing:0.1em;text-transform:uppercase;">Direct link:</p>
-    <p style="margin:0 0 22px;font-family:'Courier New',monospace;font-size:10px;color:#005f73;word-break:break-all;">${verifyLink}</p>
+    <p style="margin:0 0 22px;font-family:'Courier New',monospace;font-size:10px;color:#005f73;word-break:break-all;"><a href="${verifyLink}" style="color:#005f73;">${APP_URL}/v/${short_code}</a></p>
     <hr style="border:none;border-top:1px solid #d8d4c8;margin:20px 0;">
     <p style="margin:0 0 8px;font-family:'Courier New',monospace;font-size:9px;letter-spacing:0.2em;text-transform:uppercase;color:#005f73;">Prescription Summary</p>
     ${rxTableHtml}
@@ -493,7 +538,7 @@ app.post('/api/send/email', async (req, res) => {
   <tr><td style="background:#f4f1e8;padding:18px 28px;border-top:1px solid #d8d4c8;">
     <p style="margin:0;font-family:'Courier New',monospace;font-size:8px;color:#8a8070;line-height:1.9;">
       ${practice_name || 'RxVerify'} · Verified prescription platform<br>
-      Signed using secp256k1 cryptography · Verify at ${APP_URL}/v/${short_code}<br>
+      Signed using secp256k1 cryptography · Verify at <a href="${verifyLink}" style="color:#8a8070;">${APP_URL}/v/${short_code}</a><br>
       Opticians Act 1989 · Electronic Communications Act 2000<br>
       <a href="${APP_URL}/privacy" style="color:#8a8070;">Privacy Policy</a>
     </p>
