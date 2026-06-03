@@ -497,16 +497,20 @@ app.post('/api/send/email', async (req, res) => {
     const displayDOB = formatDOB(patient_dob);
 
     // ── Encode full payload into URL fragment ──
-    // The # fragment is never sent to the server — browser decodes it locally
-    // This enables full verification with clinical data on the patient's device
     let verifyLink = `${APP_URL}/v/${short_code}`;
     if (full_payload) {
       try {
+        // DEBUG: compute hash of what we're encoding to compare with stored hash
+        const { sig_optometrist: _s1, sig_practice: _s2, prescription_id: _s3, ...emailCanonical } = full_payload;
+        const emailCanonicalStr = JSON.stringify(emailCanonical);
+        console.log('EMAIL canonical keys:', Object.keys(emailCanonical));
+        console.log('EMAIL canonical hash:', sha256hex(emailCanonicalStr));
+        console.log('EMAIL canonical preview:', emailCanonicalStr.slice(0, 200));
+
         const encoded = Buffer.from(JSON.stringify(full_payload)).toString('base64');
         verifyLink = `${APP_URL}/v/${short_code}#${encoded}`;
       } catch(e) {
         console.warn('Could not encode payload for URL:', e.message);
-        // Fall back to link without payload — verification page shows metadata only
       }
     }
 
