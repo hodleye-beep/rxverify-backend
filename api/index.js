@@ -70,9 +70,9 @@ app.post('/api/prescriptions', async (req, res) => {
     const sig = payload.sig_optometrist || payload.sig;
     if (!sig) return res.status(400).json({ error: 'No signature in payload' });
 
-    // ── Hash the canonical payload (sig fields stripped) ──
-    // This is what we store — a fingerprint, not the content
-    const { sig_optometrist, sig_practice, ...canonicalPayload } = payload;
+    // ── Hash the canonical payload ──
+    // Strip sig fields AND prescription_id (added after signing, not part of signed data)
+    const { sig_optometrist, sig_practice, prescription_id: _pid, ...canonicalPayload } = payload;
     const payloadHash = sha256hex(JSON.stringify(canonicalPayload));
 
     const { error } = await supabase
@@ -174,7 +174,8 @@ app.post('/api/verify', async (req, res) => {
     }
 
     // ── 3. Hash match — confirms payload is unmodified ──
-    const { sig_optometrist, sig_practice, ...canonicalPayload } = payload;
+    // Strip sig fields AND prescription_id (same as when hash was stored)
+    const { sig_optometrist, sig_practice, prescription_id: _pid2, ...canonicalPayload } = payload;
     const presentedHash = sha256hex(JSON.stringify(canonicalPayload));
     checks.hash_match   = presentedHash === record.payload_hash;
     checks.not_tampered = checks.hash_match;
@@ -973,7 +974,8 @@ async function run() {
   const checks  = [];
   let   allOk   = true;
   const now     = Math.floor(Date.now()/1000);
-  const { sig_optometrist, sig_practice, ...canonical } = rx;
+  // Strip sig fields AND prescription_id — matches what was signed
+  const { sig_optometrist, sig_practice, prescription_id: _rxpid, ...canonical } = rx;
   const sig = sig_optometrist || rx.sig;
 
   // 1. Schema
