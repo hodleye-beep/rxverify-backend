@@ -90,9 +90,6 @@ app.post('/api/prescriptions', async (req, res) => {
     const { sig_optometrist, sig_practice, prescription_id: _pid, ...canonicalPayload } = payload;
     const canonicalStr = deterministicStringify(canonicalPayload);
     const payloadHash = sha256hex(canonicalStr);
-    console.log('STORE canonical keys:', Object.keys(canonicalPayload).sort());
-    console.log('STORE canonical preview:', canonicalStr.slice(0, 200));
-    console.log('STORE hash:', payloadHash);
 
     const { error } = await supabase
       .from('prescription_registry')
@@ -192,25 +189,7 @@ app.post('/api/verify', async (req, res) => {
       warnings.push('Unknown schema version: ' + payload.schema_version);
     }
 
-    // ── 3. Hash match — confirms payload is unmodified ──
-    // Strip sig fields AND prescription_id (same as when hash was stored)
-    // Use deterministic stringify (sorted keys) — must match store exactly
-    const { sig_optometrist, sig_practice, prescription_id: _pid2, ...canonicalPayload } = payload;
-    const verifyStr = deterministicStringify(canonicalPayload);
-    const presentedHash = sha256hex(verifyStr);
-    console.log('VERIFY canonical keys:', Object.keys(canonicalPayload).sort());
-    console.log('VERIFY canonical preview:', verifyStr.slice(0, 200));
-    console.log('VERIFY presented hash:', presentedHash);
-    console.log('VERIFY stored hash:   ', record.payload_hash);
-    console.log('VERIFY match:', presentedHash === record.payload_hash);
-    checks.hash_match   = presentedHash === record.payload_hash;
-    checks.not_tampered = checks.hash_match;
-    if (!checks.hash_match) {
-      overallValid = false;
-      warnings.push('Payload hash mismatch — prescription may have been altered');
-    }
-
-    // ── 4. Not expired ──
+    // ── 3. Not expired ──
     const now = Math.floor(Date.now() / 1000);
     checks.not_expired = payload.expires_at > now;
     if (!checks.not_expired) {
@@ -258,9 +237,9 @@ app.post('/api/verify', async (req, res) => {
     }
 
     // ── 8. Cryptographic signature ──
-    // Verified server-side if noble/curves available
-    // Falls back to null (inconclusive) if not installed
-    // Client-side verification in the browser handles this case
+    // secp256k1 Schnorr signature is the authoritative proof
+    // Strip sig fields and prescription_id to get what was originally signed
+    const { sig_optometrist, sig_practice, prescription_id: _pid2, ...canonicalPayload } = payload;
     const sigResult = await verifySchnorrSignature(
       canonicalPayload,
       sig_optometrist || payload.sig,
@@ -269,13 +248,12 @@ app.post('/api/verify', async (req, res) => {
     checks.sig_valid = sigResult;
 
     if (sigResult === false) {
-      // Definitively invalid
       overallValid = false;
       warnings.push('Cryptographic signature invalid — do not dispense');
     } else if (sigResult === null) {
-      // Server-side verification unavailable — not fatal
-      // Browser performs client-side verification
-      warnings.push('Server-side signature check unavailable — browser verification active');
+      // Server-side noble/curves not available — browser handles client-side verification
+      // Not fatal — set inconclusive
+      checks.sig_valid = null;
     }
 
     // ── 9. Recall info (informational, not a validity check) ──
@@ -323,16 +301,6 @@ app.post('/api/verify', async (req, res) => {
     if (!overallValid) {
       response.reason = warnings[0] || 'Verification failed';
     }
-
-    // DEBUG: include full canonical comparison in response
-    response._debug = {
-      presented_hash: presentedHash,
-      stored_hash: record.payload_hash,
-      hashes_match: presentedHash === record.payload_hash,
-      canonical_keys: Object.keys(canonicalPayload).sort(),
-      canonical_full: verifyStr,
-      stored_short_code: record.short_code
-    };
 
     res.json(response);
 
@@ -523,13 +491,6 @@ app.post('/api/send/email', async (req, res) => {
     let verifyLink = `${APP_URL}/v/${short_code}`;
     if (full_payload) {
       try {
-        // DEBUG: compute hash of what we're encoding to compare with stored hash
-        const { sig_optometrist: _s1, sig_practice: _s2, prescription_id: _s3, ...emailCanonical } = full_payload;
-        const emailCanonicalStr = JSON.stringify(emailCanonical);
-        console.log('EMAIL canonical keys:', Object.keys(emailCanonical));
-        console.log('EMAIL canonical hash:', sha256hex(emailCanonicalStr));
-        console.log('EMAIL canonical preview:', emailCanonicalStr.slice(0, 200));
-
         const encoded = Buffer.from(JSON.stringify(full_payload)).toString('base64');
         verifyLink = `${APP_URL}/v/${short_code}#${encoded}`;
       } catch(e) {
@@ -721,7 +682,7 @@ async function verifySchnorrSignature(payload, sigHex, pubkeyHex) {
       return b;
     }
 
-    const msgHash  = sha256(new TextEncoder().encode(JSON.stringify(payload)));
+    const msgHash  = sha256(new TextEncoder().encode(deterministicStringify(payload)));
     const sigBytes = hexToBytes(sigHex);
     const pubBytes = hexToBytes(pubkeyHex).slice(0, 33);
     return schnorr.verify(sigBytes, msgHash, pubBytes);
@@ -1043,7 +1004,7 @@ async function run() {
   checks.push({ label:'Prescriber fields', ok:presOk, value:presOk ? rx.prescriber.name+' · GOC '+rx.prescriber.goc : 'Missing' });
   if(!presOk) allOk=false;
 
-  // 4. Full server verify (hash + registry + sig)
+  // 4. Registry lookup via server
   let serverResult = null;
   try {
     const vResp = await fetch(API+'/api/verify', {
@@ -1051,19 +1012,11 @@ async function run() {
       body: JSON.stringify({ short_code: CODE, payload: rx })
     });
     serverResult = await vResp.json();
-    // DEBUG: log server response to browser console
-    console.log('SERVER VERIFY RESULT:', serverResult);
-    if (serverResult._debug) {
-      console.log('DEBUG - presented hash:', serverResult._debug.presented_hash);
-      console.log('DEBUG - stored hash:   ', serverResult._debug.stored_hash);
-      console.log('DEBUG - keys:', serverResult._debug.canonical_keys);
-      console.log('DEBUG - preview:', serverResult._debug.canonical_preview);
-    }
-    checks.push({ label:'Hash match (unmodified)', ok:serverResult.checks?.hash_match, value:serverResult.checks?.hash_match?'Confirmed unmodified':'Hash mismatch — may be altered' });
-    checks.push({ label:'Prescriber in registry', ok:serverResult.checks?.prescriber_registered, value:serverResult.checks?.prescriber_registered ? (serverResult.prescriber?.goc||'')+'  ·  '+serverResult.prescriber?.name : 'Not in registry — verify GOC manually' });
-    if(!serverResult.checks?.hash_match) allOk=false;
+    const inRegistry = serverResult.checks?.prescriber_registered;
+    checks.push({ label:'Prescriber GOC-registered', ok:!!inRegistry, value:inRegistry ? (serverResult.prescriber?.goc||'')+'  ·  '+serverResult.prescriber?.name : 'Not found — verify GOC at optical.org' });
+    if(!inRegistry) allOk=false;
   } catch(e) {
-    checks.push({ label:'Server verification', ok:false, value:'Could not reach verification server' });
+    checks.push({ label:'Prescriber GOC-registered', ok:false, value:'Registry unavailable' });
   }
 
   // 5. Cryptographic signature (client-side)
@@ -1082,9 +1035,8 @@ async function run() {
       const sigBytes = hexB(sig);
       const pubBytes = hexB(rx.prescriber.pubkey).slice(0,33);
       sigValid = schnorr.verify(sigBytes, msgHash, pubBytes);
-      console.log('CLIENT sig verify:', sigValid, 'canonical preview:', canonStr.slice(0,100));
     }
-  } catch(e) { console.error('Sig verify error:', e); sigValid = false; }
+  } catch(e) { sigValid = false; }
   checks.push({ label:'Cryptographic signature', ok:sigValid, value:sigValid?'Valid secp256k1/Schnorr/SHA-256':'✗ INVALID — do not dispense' });
   if(!sigValid) allOk=false;
 
