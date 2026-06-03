@@ -944,7 +944,8 @@ body{font-family:'Lora',Georgia,serif;background:#f4f1e8;color:#1a1a2e;min-heigh
 import { schnorr } from 'https://esm.sh/@noble/curves@1.4.0/secp256k1';
 import { sha256 }  from 'https://esm.sh/@noble/hashes@1.4.0/sha256';
 
-const API   = '${APP_URL}';
+// Use relative URLs — works on any domain (rxverify.co.uk or www.rxverify.co.uk)
+const API   = '';
 const CODE  = '${code}';
 const META  = ${JSON.stringify(meta)};
 
