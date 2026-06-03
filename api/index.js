@@ -491,7 +491,9 @@ app.post('/api/send/email', async (req, res) => {
     let verifyLink = `${APP_URL}/v/${short_code}`;
     if (full_payload) {
       try {
-        const encoded = Buffer.from(JSON.stringify(full_payload)).toString('base64');
+        // Unicode-safe base64 encoding — handles all UTF-8 characters
+        const jsonStr = JSON.stringify(full_payload);
+        const encoded = Buffer.from(jsonStr, 'utf8').toString('base64');
         verifyLink = `${APP_URL}/v/${short_code}#${encoded}`;
       } catch(e) {
         console.warn('Could not encode payload for URL:', e.message);
@@ -971,8 +973,12 @@ async function run() {
   let rx = null;
 
   if (fragment) {
-    try { rx = JSON.parse(atob(fragment)); }
-    catch(e) { try { rx = JSON.parse(decodeURIComponent(fragment)); } catch(e2) {} }
+    try {
+      // Unicode-safe base64 decode — handles UTF-8 characters like ·
+      rx = JSON.parse(decodeURIComponent(escape(atob(fragment))));
+    } catch(e) {
+      try { rx = JSON.parse(decodeURIComponent(fragment)); } catch(e2) {}
+    }
   }
 
   if (!rx) {
