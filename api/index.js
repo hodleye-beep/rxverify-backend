@@ -36,6 +36,20 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const APP_URL   = process.env.APP_URL || 'https://rxverify.co.uk';
 
 // ── Crypto helpers (Node built-in — no noble needed server-side) ──
+// ── Deterministic JSON stringify ──
+// Sorts keys recursively to ensure consistent hashing
+// regardless of JS engine key ordering
+function deterministicStringify(obj) {
+  if (obj === null || typeof obj !== 'object' || Array.isArray(obj)) {
+    return JSON.stringify(obj);
+  }
+  const sortedKeys = Object.keys(obj).sort();
+  const parts = sortedKeys.map(key => {
+    return JSON.stringify(key) + ':' + deterministicStringify(obj[key]);
+  });
+  return '{' + parts.join(',') + '}';
+}
+
 function sha256hex(str) {
   return crypto.createHash('sha256').update(str).digest('hex');
 }
@@ -72,12 +86,11 @@ app.post('/api/prescriptions', async (req, res) => {
 
     // ── Hash the canonical payload ──
     // Strip sig fields AND prescription_id (added after signing, not part of signed data)
+    // Use deterministic stringify (sorted keys) for consistent hashing across environments
     const { sig_optometrist, sig_practice, prescription_id: _pid, ...canonicalPayload } = payload;
-    const canonicalStr = JSON.stringify(canonicalPayload);
+    const canonicalStr = deterministicStringify(canonicalPayload);
     const payloadHash = sha256hex(canonicalStr);
-
-    // DEBUG: log first 200 chars of canonical string to help diagnose hash mismatches
-    console.log('STORE canonical keys:', Object.keys(canonicalPayload));
+    console.log('STORE canonical keys:', Object.keys(canonicalPayload).sort());
     console.log('STORE canonical preview:', canonicalStr.slice(0, 200));
     console.log('STORE hash:', payloadHash);
 
@@ -181,17 +194,15 @@ app.post('/api/verify', async (req, res) => {
 
     // ── 3. Hash match — confirms payload is unmodified ──
     // Strip sig fields AND prescription_id (same as when hash was stored)
+    // Use deterministic stringify (sorted keys) — must match store exactly
     const { sig_optometrist, sig_practice, prescription_id: _pid2, ...canonicalPayload } = payload;
-    const verifyStr = JSON.stringify(canonicalPayload);
+    const verifyStr = deterministicStringify(canonicalPayload);
     const presentedHash = sha256hex(verifyStr);
-
-    // DEBUG: log to compare with store
-    console.log('VERIFY canonical keys:', Object.keys(canonicalPayload));
+    console.log('VERIFY canonical keys:', Object.keys(canonicalPayload).sort());
     console.log('VERIFY canonical preview:', verifyStr.slice(0, 200));
     console.log('VERIFY presented hash:', presentedHash);
     console.log('VERIFY stored hash:   ', record.payload_hash);
     console.log('VERIFY match:', presentedHash === record.payload_hash);
-
     checks.hash_match   = presentedHash === record.payload_hash;
     checks.not_tampered = checks.hash_match;
     if (!checks.hash_match) {
@@ -806,7 +817,7 @@ async function generatePDF(rx) {
   page.drawText(sig ? sig.slice(0,36)+'…' : '—', { x:20, y, size:7, font:fontR, color:muted });
   y -= 14;
   page.drawRectangle({ x:18, y:y-14, width:150, height:18, color:rgb(0.88,0.95,0.90), borderColor:green, borderWidth:0.5 });
-  page.drawText('✓  CRYPTOGRAPHICALLY SIGNED', { x:24, y:y-9, size:7, font:fontB, color:green, characterSpacing:0.5 });
+  page.drawText('CRYPTOGRAPHICALLY SIGNED', { x:24, y:y-9, size:7, font:fontB, color:green, characterSpacing:0.5 });
   y -= 28;
   page.drawText(`ID: ${shortCode}  ·  ${verifyUrl}`, { x:20, y, size:7.5, font:fontR, color:teal });
   y -= 20;
@@ -1044,15 +1055,24 @@ async function run() {
   }
 
   // 5. Cryptographic signature (client-side)
+  // Uses deterministic JSON stringify (sorted keys) to match server-side hashing
+  function deterministicStringify(obj) {
+    if (obj === null || typeof obj !== 'object' || Array.isArray(obj)) return JSON.stringify(obj);
+    const sortedKeys = Object.keys(obj).sort();
+    return '{' + sortedKeys.map(k => JSON.stringify(k) + ':' + deterministicStringify(obj[k])).join(',') + '}';
+  }
+
   let sigValid = false;
   try {
     if(sig && rx.prescriber?.pubkey) {
-      const msgHash  = sha256(new TextEncoder().encode(JSON.stringify(canonical)));
+      const canonStr = deterministicStringify(canonical);
+      const msgHash  = sha256(new TextEncoder().encode(canonStr));
       const sigBytes = hexB(sig);
       const pubBytes = hexB(rx.prescriber.pubkey).slice(0,33);
       sigValid = schnorr.verify(sigBytes, msgHash, pubBytes);
+      console.log('CLIENT sig verify:', sigValid, 'canonical preview:', canonStr.slice(0,100));
     }
-  } catch(e) { sigValid = false; }
+  } catch(e) { console.error('Sig verify error:', e); sigValid = false; }
   checks.push({ label:'Cryptographic signature', ok:sigValid, value:sigValid?'Valid secp256k1/Schnorr/SHA-256':'✗ INVALID — do not dispense' });
   if(!sigValid) allOk=false;
 
