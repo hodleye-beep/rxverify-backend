@@ -530,18 +530,21 @@ app.post('/api/send/email', async (req, res) => {
           <th style="padding:7px 10px;text-align:center;border:1px solid #d8d4c8;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:#005f73;">Sphere</th>
           <th style="padding:7px 10px;text-align:center;border:1px solid #d8d4c8;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:#005f73;">Cylinder</th>
           <th style="padding:7px 10px;text-align:center;border:1px solid #d8d4c8;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:#005f73;">Axis</th>
+          ${(rx_summary.r_add || rx_summary.l_add) ? '<th style="padding:7px 10px;text-align:center;border:1px solid #d8d4c8;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:#005f73;">Add</th>' : ''}
         </tr>
         <tr>
           <td style="padding:7px 10px;border:1px solid #d8d4c8;color:#005f73;font-weight:bold;">R (OD)</td>
           <td style="padding:7px 10px;border:1px solid #d8d4c8;text-align:center;">${fmtVal(rx_summary.r_sphere)}</td>
           <td style="padding:7px 10px;border:1px solid #d8d4c8;text-align:center;">${fmtVal(rx_summary.r_cyl)}</td>
           <td style="padding:7px 10px;border:1px solid #d8d4c8;text-align:center;">${rx_summary.r_axis ? rx_summary.r_axis + '°' : '—'}</td>
+          ${(rx_summary.r_add || rx_summary.l_add) ? `<td style="padding:7px 10px;border:1px solid #d8d4c8;text-align:center;">${fmtVal(rx_summary.r_add)}</td>` : ''}
         </tr>
         <tr style="background:#fdfcf7;">
           <td style="padding:7px 10px;border:1px solid #d8d4c8;color:#005f73;font-weight:bold;">L (OS)</td>
           <td style="padding:7px 10px;border:1px solid #d8d4c8;text-align:center;">${fmtVal(rx_summary.l_sphere)}</td>
           <td style="padding:7px 10px;border:1px solid #d8d4c8;text-align:center;">${fmtVal(rx_summary.l_cyl)}</td>
           <td style="padding:7px 10px;border:1px solid #d8d4c8;text-align:center;">${rx_summary.l_axis ? rx_summary.l_axis + '°' : '—'}</td>
+          ${(rx_summary.r_add || rx_summary.l_add) ? `<td style="padding:7px 10px;border:1px solid #d8d4c8;text-align:center;">${fmtVal(rx_summary.l_add)}</td>` : ''}
         </tr>
       </table>
       ${rx_summary.clinical_notes ? `<p style="margin:8px 0 0;font-family:'Courier New',monospace;font-size:11px;color:#2d3561;"><strong>Notes:</strong> ${rx_summary.clinical_notes}</p>` : ''}` : '';
@@ -571,7 +574,7 @@ app.post('/api/send/email', async (req, res) => {
     <table width="100%" style="font-family:'Courier New',monospace;font-size:11px;color:#8a8070;margin-top:12px;">
       ${displayDOB ? `<tr><td style="padding:3px 0;width:160px;">Date of birth:</td><td style="color:#1a1a2e;">${displayDOB}</td></tr>` : ''}
       <tr><td style="padding:3px 0;width:160px;">Valid until:</td><td style="color:#1a1a2e;">${expires_date || '—'}</td></tr>
-      <tr><td style="padding:3px 0;">Next sight test:</td><td style="color:#005f73;font-weight:600;">${recall_date || '—'}</td></tr>
+      <tr><td style="padding:3px 0;">Next sight test:</td><td style="color:#005f73;font-weight:600;">${recall_date ? new Date(recall_date).toLocaleDateString('en-GB', {day:'numeric',month:'long',year:'numeric'}) : '—'}</td></tr>
       <tr><td style="padding:3px 0;">Issued by:</td><td style="color:#1a1a2e;">${prescriber_name || '—'} · GOC ${goc_number || '—'}</td></tr>
       <tr><td style="padding:3px 0;">Prescription ID:</td><td style="color:#1a1a2e;">${short_code}</td></tr>
     </table>
@@ -895,7 +898,7 @@ Return ONLY valid JSON, no preamble, no markdown:
   "optometrist_name":null,"goc_number":null,"practice_name":null,
   "add_consistent":null,"add_difference_flagged":false
 }
-Rules: minus cylinder convention. 0.25 steps. Axis integer 1-180. Null if not present. Plano=0.00. DS=null cylinder. VA goes in clinical_notes only. Recall date in past = null months.`;
+Rules: minus cylinder convention. 0.25 steps. Axis integer 1-180. Null if not present. Plano=0.00. DS=null cylinder. Do NOT include visual acuity (VA) in clinical_notes — leave clinical_notes null unless there are specific clinical recommendations (e.g. lens coatings, referrals). Recall date in past = null months.`;
 
   const resp = await anthropic.messages.create({
     model: 'claude-opus-4-5',
