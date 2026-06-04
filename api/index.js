@@ -772,7 +772,7 @@ async function generatePDF(rx) {
   page.drawText(`Valid until: ${new Date(rx.expires_at*1000).toLocaleDateString('en-GB')}`, { x:20, y, size:8, font:fontR, color:muted });
   y -= 18;
   page.drawLine({ start:{x:20,y}, end:{x:width-20,y}, thickness:0.5, color:rgb(0.85,0.83,0.78) });
-  y -= 14;
+  y -= 16;
 
   // Rx table
   page.drawText('REFRACTION', { x:20, y, size:7, font:fontB, color:teal, characterSpacing:1.5 });
