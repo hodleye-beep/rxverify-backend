@@ -398,7 +398,10 @@ app.post('/api/registry/auto-register', async (req, res) => {
       return res.status(400).json({ error: 'npub, goc_number and name required' });
     }
 
-    // Upsert — update if exists, insert if not
+    // Upsert on npub — each keypair is unique
+    // Changing a GOC number's keypair requires manual admin approval
+    // This prevents anyone from silently overwriting an existing keypair
+    // Key recovery: optometrist contacts admin → verified → Supabase updated manually
     const { error } = await supabase
       .from('registry_entries')
       .upsert({
@@ -408,13 +411,33 @@ app.post('/api/registry/auto-register', async (req, res) => {
         practice: practice || null,
         address:  address  || null,
         jurisdiction: jurisdiction || 'UK-GOC',
-        status: 'approved',  // Auto-approve for own practice use
+        status: 'approved',
         email_verified: true,
         id_verified: true,
         verified_at: new Date().toISOString()
       }, { onConflict: 'npub' });
 
     if (error) {
+      if (error.code === '23505') {
+        // Unique constraint violation — either npub or goc_number already exists
+        // Check which one
+        const { data: existing } = await supabase
+          .from('registry_entries')
+          .select('npub, goc_number')
+          .eq('goc_number', goc_number)
+          .single();
+
+        if (existing && existing.npub !== npub) {
+          // GOC number exists with a different keypair — requires admin to update
+          return res.status(409).json({
+            error: 'GOC number already registered with a different keypair',
+            message: 'To update your keypair, contact the RxVerify administrator',
+            goc_number
+          });
+        }
+        // Same npub already registered — that's fine, just return success
+        return res.json({ success: true, message: 'Registry entry already current' });
+      }
       console.error('Auto-register error:', error);
       return res.status(500).json({ error: 'Registration failed' });
     }
