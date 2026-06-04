@@ -9,6 +9,7 @@
 
 require('dotenv').config();
 const express    = require('express');
+const { recallCronRoute } = require('./recall-scheduler');
 const cors       = require('cors');
 const crypto     = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
@@ -119,6 +120,28 @@ app.post('/api/prescriptions', async (req, res) => {
       }
       console.error('Store error:', error);
       return res.status(500).json({ error: 'Store failed' });
+    }
+
+    // ── Store patient contact for recall notifications (if consent given) ──
+    // Only stores email/name — contact_hash links it to the prescription
+    // without storing clinical data alongside PII
+    if (payload.consent?.recall && payload.patient?.contact_hash) {
+      const contactData = {
+        contact_hash: payload.patient.contact_hash,
+        name:         payload.patient.display_name || null,
+        // email is not in the payload (hashed only) — but the HTML sends it
+        // in the full payload as patient.contact_email if present
+        email:        payload.patient.contact_email || null,
+        mobile:       payload.patient.contact_mobile || null,
+        created_at:   new Date().toISOString(),
+      };
+      if (contactData.email || contactData.mobile) {
+        await supabase
+          .from('recall_contacts')
+          .upsert(contactData, { onConflict: 'contact_hash' })
+          .then(() => {})
+          .catch(e => console.warn('recall_contacts upsert:', e.message));
+      }
     }
 
     res.json({
@@ -1463,6 +1486,9 @@ function fmtVal(v) {
   if (isNaN(n)) return '—';
   return n >= 0 ? `+${n.toFixed(2)}` : n.toFixed(2);
 }
+
+// ── Recall notification cron ──
+recallCronRoute(app);
 
 // ═══════════════════════════════════════════════════════
 // START
