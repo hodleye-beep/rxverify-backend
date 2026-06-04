@@ -648,8 +648,8 @@ app.post('/api/extract', async (req, res) => {
     const extracted = await extractFromPDF(pdf_base64);
     res.json({ success: true, extracted });
   } catch (err) {
-    console.error('Extraction:', err);
-    res.status(500).json({ error: 'Extraction failed' });
+    console.error('Extraction error:', err.message, err.status, JSON.stringify(err.error));
+    res.status(500).json({ error: 'Extraction failed', detail: err.message });
   }
 });
 
@@ -898,8 +898,9 @@ Return ONLY valid JSON, no preamble, no markdown:
 Rules: minus cylinder convention. 0.25 steps. Axis integer 1-180. Null if not present. Plano=0.00. DS=null cylinder. VA goes in clinical_notes only. Recall date in past = null months.`;
 
   const resp = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-opus-4-5',
     max_tokens: 1000,
+    betas: ['pdfs-2024-09-25'],
     messages: [{ role: 'user', content: [
       { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: pdfBase64 } },
       { type: 'text', text: PROMPT }
