@@ -900,7 +900,6 @@ Rules: minus cylinder convention. 0.25 steps. Axis integer 1-180. Null if not pr
   const resp = await anthropic.messages.create({
     model: 'claude-opus-4-5',
     max_tokens: 1000,
-    betas: ['pdfs-2024-09-25'],
     messages: [{ role: 'user', content: [
       { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: pdfBase64 } },
       { type: 'text', text: PROMPT }
