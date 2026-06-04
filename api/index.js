@@ -543,7 +543,8 @@ app.post('/api/send/email', async (req, res) => {
           <td style="padding:7px 10px;border:1px solid #d8d4c8;text-align:center;">${fmtVal(rx_summary.l_cyl)}</td>
           <td style="padding:7px 10px;border:1px solid #d8d4c8;text-align:center;">${rx_summary.l_axis ? rx_summary.l_axis + '°' : '—'}</td>
         </tr>
-      </table>` : '';
+      </table>
+      ${rx_summary.clinical_notes ? `<p style="margin:8px 0 0;font-family:'Courier New',monospace;font-size:11px;color:#2d3561;"><strong>Notes:</strong> ${rx_summary.clinical_notes}</p>` : ''}` : '';
 
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
 <body style="margin:0;padding:0;background:#f4f1e8;font-family:Georgia,serif;">
@@ -797,7 +798,15 @@ async function generatePDF(rx) {
   y -= 20;
 
   const extras = [rx.rx?.pd && `PD: ${rx.rx.pd}mm`, rx.rx?.bvd && `BVD: ${rx.rx.bvd}mm`, rx.rx?.recommended_lens && rx.rx.recommended_lens.replace('_',' ')].filter(Boolean);
-  if (extras.length) { page.drawText(extras.join('  ·  '), { x:20, y, size:8, font:fontR, color:muted }); y -= 18; }
+  if (extras.length) { page.drawText(extras.join('  ·  '), { x:20, y, size:8, font:fontR, color:muted }); y -= 15; }
+
+  // Clinical notes
+  if (rx.rx?.notes) {
+    page.drawText('CLINICAL NOTES', { x:20, y, size:7, font:fontB, color:teal, characterSpacing:1.5 });
+    y -= 12;
+    page.drawText(rx.rx.notes, { x:20, y, size:8, font:fontR, color:ink, maxWidth: width - 40 });
+    y -= 15;
+  }
   y -= 6;
 
   // Recall band
@@ -992,6 +1001,7 @@ body{font-family:'Lora',Georgia,serif;background:#f4f1e8;color:#1a1a2e;min-heigh
       <tbody id="rx-body"></tbody>
     </table>
     <div id="rx-extras" style="font-family:'DM Mono',monospace;font-size:11px;color:#2d3561;"></div>
+    <div id="rx-notes" style="display:none;margin-top:10px;font-family:'DM Mono',monospace;font-size:11px;color:#2d3561;padding:8px 10px;background:#fdfcf7;border:1px solid #d8d4c8;border-radius:2px;"></div>
     <div id="recall-box"></div>
   </div>
 
@@ -1137,6 +1147,15 @@ async function run() {
 
   const extras=[rx.rx?.pd&&'PD: '+rx.rx.pd+'mm', rx.rx?.bvd&&'BVD: '+rx.rx.bvd+'mm', rx.rx?.recommended_lens&&rx.rx.recommended_lens.replace('_',' ')].filter(Boolean);
   document.getElementById('rx-extras').textContent = extras.join('  ·  ');
+
+  // Clinical notes
+  if(rx.rx?.notes) {
+    const notesEl = document.getElementById('rx-notes');
+    if(notesEl) {
+      notesEl.style.display = 'block';
+      notesEl.innerHTML = '<span style="font-family:DM Mono,monospace;font-size:9px;letter-spacing:0.15em;text-transform:uppercase;color:#8a8070;">Clinical Notes</span><br>' + rx.rx.notes;
+    }
+  }
 
   if(rx.recall?.due_date) {
     document.getElementById('recall-box').innerHTML = '<div class="recall-bx">📅 Next sight test recommended by <strong>'+rx.recall.due_date+'</strong> ('+rx.recall.months+' months)</div>';
