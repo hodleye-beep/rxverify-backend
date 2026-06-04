@@ -1168,12 +1168,11 @@ async function run() {
   }
 
   if(rx.recall?.due_date) {
-    // Format recall date without timezone issues
+    const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
     let recallDisplay = rx.recall.due_date;
     try {
-      const [yr, mo, dy] = rx.recall.due_date.split('-');
-      const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-      recallDisplay = `${parseInt(dy)} ${months[parseInt(mo)-1]} ${yr}`;
+      const parts = rx.recall.due_date.split('-');
+      recallDisplay = parseInt(parts[2]) + ' ' + months[parseInt(parts[1])-1] + ' ' + parts[0];
     } catch(e) {}
     document.getElementById('recall-box').innerHTML = '<div class="recall-bx">📅 Next sight test recommended by <strong>'+recallDisplay+'</strong> ('+rx.recall.months+' months)</div>';
   }
