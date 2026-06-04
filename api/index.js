@@ -755,8 +755,15 @@ async function generatePDF(rx) {
   // Patient name + DOB
   page.drawText(rx.patient?.display_name || 'Patient', { x:20, y, size:16, font:fontB, color:ink });
   y -= 15;
-  // DOB on same line as issued date
-  const dobStr = rx.patient?.display_dob ? `DOB: ${new Date(rx.patient.display_dob).toLocaleDateString('en-GB')}  ·  ` : '';
+  // Format DOB safely — parse YYYY-MM-DD without timezone conversion
+  let dobStr = '';
+  if (rx.patient?.display_dob) {
+    try {
+      const [yr, mo, dy] = rx.patient.display_dob.split('-');
+      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      dobStr = `DOB: ${parseInt(dy)} ${months[parseInt(mo)-1]} ${yr}  ·  `;
+    } catch(e) { dobStr = ''; }
+  }
   const sub = `${dobStr}Issued: ${new Date(rx.issued_at*1000).toLocaleDateString('en-GB')}  ·  ${rx.test_type?.replace('_',' ') || 'Standard Sight Test'}`;
   page.drawText(sub, { x:20, y, size:8, font:fontR, color:muted });
   y -= 18;
@@ -1161,7 +1168,14 @@ async function run() {
   }
 
   if(rx.recall?.due_date) {
-    document.getElementById('recall-box').innerHTML = '<div class="recall-bx">📅 Next sight test recommended by <strong>'+rx.recall.due_date+'</strong> ('+rx.recall.months+' months)</div>';
+    // Format recall date without timezone issues
+    let recallDisplay = rx.recall.due_date;
+    try {
+      const [yr, mo, dy] = rx.recall.due_date.split('-');
+      const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+      recallDisplay = `${parseInt(dy)} ${months[parseInt(mo)-1]} ${yr}`;
+    } catch(e) {}
+    document.getElementById('recall-box').innerHTML = '<div class="recall-bx">📅 Next sight test recommended by <strong>'+recallDisplay+'</strong> ('+rx.recall.months+' months)</div>';
   }
 
   document.getElementById('checks-list').innerHTML = checks.map(c =>
