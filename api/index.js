@@ -741,24 +741,33 @@ async function generatePDF(rx) {
   page.drawText('RxVerify', { x:20, y:height-22, size:16, font:fontB, color:teal });
   page.drawText('VERIFIED PRESCRIPTION', { x:20, y:height-40, size:7, font:fontR, color:rgb(0.42,0.49,0.70), characterSpacing:1.5 });
   const pName = rx.practice?.name || rx.prescriber?.name || '';
+  const pAddr = [rx.practice?.addr1, rx.practice?.addr2].filter(Boolean).join(', ');
   if (pName) page.drawText(pName, { x:width-20-fontB.widthOfTextAtSize(pName,9), y:height-22, size:9, font:fontB, color:white });
+  if (pAddr) page.drawText(pAddr, { x:width-20-fontR.widthOfTextAtSize(pAddr,7), y:height-36, size:7, font:fontR, color:rgb(0.60,0.65,0.80) });
+  if (rx.practice?.phone) page.drawText(rx.practice.phone, { x:width-20-fontR.widthOfTextAtSize(rx.practice.phone,7), y:height-47, size:7, font:fontR, color:rgb(0.60,0.65,0.80) });
 
   let y = height - 75;
 
-  // Patient
+  // Patient name + DOB
   page.drawText(rx.patient?.display_name || 'Patient', { x:20, y, size:16, font:fontB, color:ink });
   y -= 15;
-  const sub = `Issued: ${new Date(rx.issued_at*1000).toLocaleDateString('en-GB')}  ·  ${rx.test_type?.replace('_',' ') || 'Standard Sight Test'}`;
+  // DOB on same line as issued date
+  const dobStr = rx.patient?.display_dob ? `DOB: ${new Date(rx.patient.display_dob).toLocaleDateString('en-GB')}  ·  ` : '';
+  const sub = `${dobStr}Issued: ${new Date(rx.issued_at*1000).toLocaleDateString('en-GB')}  ·  ${rx.test_type?.replace('_',' ') || 'Standard Sight Test'}`;
   page.drawText(sub, { x:20, y, size:8, font:fontR, color:muted });
   y -= 18;
   page.drawLine({ start:{x:20,y}, end:{x:width-20,y}, thickness:0.5, color:rgb(0.85,0.83,0.78) });
   y -= 14;
 
-  // Prescriber
+  // Prescriber + practice
   page.drawText('PRESCRIBER', { x:20, y, size:7, font:fontB, color:teal, characterSpacing:1.5 });
   y -= 12;
   page.drawText(`${rx.prescriber?.name || '—'}  ·  GOC ${rx.prescriber?.goc || '—'}`, { x:20, y, size:9, font:fontR, color:ink });
-  y -= 14;
+  y -= 13;
+  if (pName) page.drawText(pName, { x:20, y, size:8, font:fontR, color:muted });
+  y -= 12;
+  if (pAddr) page.drawText(pAddr, { x:20, y, size:8, font:fontR, color:muted });
+  y -= 13;
   page.drawText(`Valid until: ${new Date(rx.expires_at*1000).toLocaleDateString('en-GB')}`, { x:20, y, size:8, font:fontR, color:muted });
   y -= 18;
   page.drawLine({ start:{x:20,y}, end:{x:width-20,y}, thickness:0.5, color:rgb(0.85,0.83,0.78) });
@@ -802,23 +811,48 @@ async function generatePDF(rx) {
 
   y -= 8;
   const shortCode = rx.prescription_id || '';
-  const verifyUrl = `${APP_URL}/v/${shortCode}`;
+  const verifyUrlBase = `${APP_URL}/v/${shortCode}`;
+
+  // Encode full payload into QR so scanning gives complete verification
+  // Unicode-safe base64 encoding
+  let verifyUrl = verifyUrlBase;
+  try {
+    const { sig_optometrist: _s1, sig_practice: _s2, ...rxForQR } = rx;
+    const fullRx = { ...rxForQR, sig_optometrist: rx.sig_optometrist, sig_practice: rx.sig_practice };
+    const encoded = Buffer.from(JSON.stringify(fullRx), 'utf8').toString('base64');
+    verifyUrl = `${verifyUrlBase}#${encoded}`;
+  } catch(e) {
+    verifyUrl = verifyUrlBase;
+  }
 
   try {
-    const qrUrl = await QRCode.toDataURL(verifyUrl, { width:100, margin:1, color:{dark:'#1a1a2e',light:'#ffffff'} });
+    // QR encodes the full verification URL with payload
+    // Error correction L allows larger data capacity
+    const qrUrl = await QRCode.toDataURL(verifyUrl, {
+      width: 100, margin: 1,
+      errorCorrectionLevel: 'L',
+      color: { dark: '#1a1a2e', light: '#ffffff' }
+    });
     const qrImg = await pdfDoc.embedPng(Buffer.from(qrUrl.split(',')[1], 'base64'));
     page.drawImage(qrImg, { x:width-115, y:y-90, width:90, height:90 });
-  } catch(e) {}
+  } catch(e) {
+    // If payload too large for QR, fall back to short URL only
+    try {
+      const qrUrl = await QRCode.toDataURL(verifyUrlBase, { width:100, margin:1, color:{dark:'#1a1a2e',light:'#ffffff'} });
+      const qrImg = await pdfDoc.embedPng(Buffer.from(qrUrl.split(',')[1], 'base64'));
+      page.drawImage(qrImg, { x:width-115, y:y-90, width:90, height:90 });
+    } catch(e2) {}
+  }
 
   page.drawText('DIGITAL SIGNATURE', { x:20, y, size:7, font:fontB, color:teal, characterSpacing:1.5 });
   y -= 12;
   const sig = rx.sig_optometrist || rx.sig || '';
-  page.drawText(sig ? sig.slice(0,36)+'…' : '—', { x:20, y, size:7, font:fontR, color:muted });
+  page.drawText(sig ? sig.slice(0,36)+'...' : '—', { x:20, y, size:7, font:fontR, color:muted });
   y -= 14;
   page.drawRectangle({ x:18, y:y-14, width:150, height:18, color:rgb(0.88,0.95,0.90), borderColor:green, borderWidth:0.5 });
   page.drawText('CRYPTOGRAPHICALLY SIGNED', { x:24, y:y-9, size:7, font:fontB, color:green, characterSpacing:0.5 });
   y -= 28;
-  page.drawText(`ID: ${shortCode}  ·  ${verifyUrl}`, { x:20, y, size:7.5, font:fontR, color:teal });
+  page.drawText(`ID: ${shortCode}  ·  ${verifyUrlBase}`, { x:20, y, size:7.5, font:fontR, color:teal });
   y -= 20;
   page.drawLine({ start:{x:20,y}, end:{x:width-20,y}, thickness:0.5, color:rgb(0.85,0.83,0.78) });
   y -= 11;
