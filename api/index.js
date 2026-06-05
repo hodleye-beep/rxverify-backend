@@ -29,8 +29,11 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 
 // ── Serve static frontend ──────────────────────────────
-// Serves rxverify-uk.html at / and any other static assets
-app.use(express.static(path.join(__dirname, 'public')));
+// HTML is embedded directly to avoid Vercel __dirname issues
+const fs = require('fs');
+const FRONTEND_HTML = fs.readFileSync(require('path').join(__dirname, 'public', 'index.html'), 'utf8');
+
+// Serve frontend at root and any non-API route
 
 // ── Auth check endpoint ────────────────────────────────
 // Simple password gate — password set via RXVERIFY_PASSWORD env var
@@ -1511,10 +1514,10 @@ function fmtVal(v) {
 recallCronRoute(app);
 
 // ── Catch-all: serve frontend for non-API routes ──────
-// Handles /v/:code and any direct URL navigation
 app.get('*', (req, res) => {
   if (!req.path.startsWith('/api') && !req.path.startsWith('/widget')) {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(FRONTEND_HTML);
   } else {
     res.status(404).json({ error: 'Not found' });
   }
@@ -1530,5 +1533,3 @@ app.listen(PORT, () => {
   console.log(`Verify endpoint: POST /api/verify`);
   console.log(`Retailer widget: GET /widget.js`);
 });
-
-module.exports = app;
