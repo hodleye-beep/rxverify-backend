@@ -4,12 +4,28 @@
     {
       "src": "api/index.js",
       "use": "@vercel/node"
+    },
+    {
+      "src": "api/public/index.html",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
     {
-      "src": "/(.*)",
+      "src": "/api/(.*)",
       "dest": "api/index.js"
+    },
+    {
+      "src": "/v/(.*)",
+      "dest": "api/index.js"
+    },
+    {
+      "src": "/widget.js",
+      "dest": "api/index.js"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "api/public/index.html"
     }
   ],
   "env": {
