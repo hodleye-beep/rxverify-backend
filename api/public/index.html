@@ -1,0 +1,192 @@
+:root{ --ink:#1a1a2e;--ink2:#2d3561;--teal:#0a9396;--teal2:#005f73; --cream:#fdfcf7;--warm:#f4f1e8;--border:#d8d4c8;--muted:#8a8070; --green:#2d6a4f;--red:#9b2226;--amber:#92600a; --shadow:0 2px 20px rgba(26,26,46,0.08); } *{box-sizing:border-box;margin:0;padding:0;} body{font-family:'Lora',Georgia,serif;background:var(--cream);color:var(--ink);min-height:100vh;} header{background:var(--ink);color:var(--cream);padding:18px 32px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;} .logo{display:flex;align-items:baseline;gap:10px;} .logo-mark{font-family:'DM Mono',monospace;font-size:18px;letter-spacing:-0.02em;color:var(--teal);} .logo-sub{font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:#6b7db3;font-family:'DM Mono',monospace;} .header-info{font-family:'DM Mono',monospace;font-size:10px;color:#6b7db3;text-align:right;line-height:1.7;} .header-info span{color:var(--teal);} nav{background:var(--ink2);display:flex;padding:0 24px;overflow-x:auto;} nav button{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;padding:13px 15px;background:none;border:none;color:#6b7db3;cursor:pointer;border-bottom:2px solid transparent;transition:all 0.2s;white-space:nowrap;} nav button.active{color:var(--teal);border-bottom-color:var(--teal);} nav button:hover:not(.active){color:#94a3d4;} main{max-width:920px;margin:0 auto;padding:32px 20px;} .tab-panel{display:none;} .tab-panel.active{display:block;animation:fadeIn 0.22s ease;} @keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}} .card{background:white;border:1px solid var(--border);border-radius:3px;padding:26px;margin-bottom:18px;box-shadow:var(--shadow);} .card-title{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.28em;text-transform:uppercase;color:var(--teal2);margin-bottom:18px;padding-bottom:9px;border-bottom:1px solid var(--border);} .card-sub{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);margin-bottom:14px;line-height:1.75;} .field-row{display:flex;gap:14px;margin-bottom:12px;flex-wrap:wrap;} .field{display:flex;flex-direction:column;gap:4px;flex:1;min-width:130px;} .field label{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.16em;text-transform:uppercase;color:var(--muted);} .field input,.field select,.field textarea{border:1px solid var(--border);border-radius:2px;padding:8px 10px;font-family:'DM Mono',monospace;font-size:12px;color:var(--ink);background:var(--cream);outline:none;transition:border-color 0.2s;width:100%;} .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--teal);background:white;} .field input[readonly]{background:var(--warm);color:var(--muted);} .btn{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:0.15em;text-transform:uppercase;padding:10px 20px;border-radius:2px;cursor:pointer;transition:all 0.2s;display:inline-flex;align-items:center;gap:7px;border:none;} .btn-primary{background:var(--teal2);color:white;border:1px solid var(--teal2);} .btn-primary:hover{background:var(--teal);border-color:var(--teal);} .btn-primary:disabled{opacity:0.45;cursor:not-allowed;} .btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--border);} .btn-ghost:hover{border-color:var(--teal);color:var(--teal2);} .btn-amber{background:rgba(146,96,10,0.08);color:var(--amber);border:1px solid rgba(146,96,10,0.3);} .btn-amber:hover{background:rgba(146,96,10,0.15);} .badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:2px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;} .badge-valid{background:rgba(45,106,79,0.1);color:var(--green);border:1px solid rgba(45,106,79,0.25);} .badge-invalid{background:rgba(155,34,38,0.1);color:var(--red);border:1px solid rgba(155,34,38,0.25);} .badge-info{background:rgba(10,147,150,0.1);color:var(--teal2);border:1px solid rgba(10,147,150,0.25);} .badge-warn{background:rgba(146,96,10,0.1);color:var(--amber);border:1px solid rgba(146,96,10,0.25);} .badge-pending{background:rgba(107,125,179,0.1);color:var(--ink2);border:1px solid rgba(107,125,179,0.25);} .mono-block{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);word-break:break-all;line-height:1.6;background:var(--warm);padding:9px 11px;border-radius:2px;border:1px solid var(--border);cursor:pointer;} .mono-block:hover{border-color:var(--teal);} .divider{border-top:1px solid var(--border);margin:18px 0;} .alert{padding:12px 14px;border-radius:2px;font-family:'DM Mono',monospace;font-size:11px;margin-bottom:14px;line-height:1.6;} .alert-warn{background:rgba(146,96,10,0.07);border:1px solid rgba(146,96,10,0.22);color:var(--amber);} .alert-info{background:rgba(10,147,150,0.06);border:1px solid rgba(10,147,150,0.18);color:var(--teal2);} .alert-success{background:rgba(45,106,79,0.07);border:1px solid rgba(45,106,79,0.22);color:var(--green);} .alert-error{background:rgba(155,34,38,0.07);border:1px solid rgba(155,34,38,0.22);color:var(--red);} /* ── VERIFICATION WIZARD ── */ .wizard-steps{display:flex;gap:0;margin-bottom:24px;background:var(--warm);border:1px solid var(--border);border-radius:3px;overflow:hidden;} .wstep{flex:1;padding:12px 8px;text-align:center;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);border-right:1px solid var(--border);transition:all 0.2s;cursor:default;} .wstep:last-child{border-right:none;} .wstep.active{background:var(--teal2);color:white;} .wstep.done{background:rgba(45,106,79,0.08);color:var(--green);} .wstep-num{display:block;font-size:14px;margin-bottom:3px;} .verif-panel{display:none;} .verif-panel.active{display:block;animation:fadeIn 0.2s ease;} .upload-zone{border:2px dashed var(--border);border-radius:3px;padding:28px;text-align:center;cursor:pointer;transition:all 0.2s;background:var(--warm);} .upload-zone:hover{border-color:var(--teal);background:rgba(10,147,150,0.04);} .upload-zone.has-file{border-color:var(--green);background:rgba(45,106,79,0.05);} .upload-label{font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);display:block;margin-top:8px;} /* ── RECALL PILLS ── */ .recall-pills{display:flex;gap:7px;flex-wrap:wrap;} .recall-pill{font-family:'DM Mono',monospace;font-size:10px;padding:7px 13px;border:1px solid var(--border);border-radius:20px;cursor:pointer;background:var(--cream);color:var(--muted);transition:all 0.16s;} .recall-pill.active{background:var(--teal2);color:white;border-color:var(--teal2);} .recall-pill:hover:not(.active){border-color:var(--teal);color:var(--teal2);} .recall-summary{font-family:'DM Mono',monospace;font-size:10px;color:var(--teal2);margin-top:10px;padding:8px 11px;background:rgba(10,147,150,0.06);border:1px solid rgba(10,147,150,0.18);border-radius:2px;} /* ── RX TABLE ── */ .rx-table{width:100%;border-collapse:collapse;} .rx-table th{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.13em;text-transform:uppercase;color:var(--teal2);padding:7px 9px;background:var(--warm);border:1px solid var(--border);text-align:center;font-weight:500;} .rx-table td{border:1px solid var(--border);padding:3px 5px;text-align:center;} .rx-table td input{border:none;background:transparent;text-align:center;font-family:'DM Mono',monospace;font-size:13px;color:var(--ink);width:100%;padding:4px;outline:none;} .rx-table td input:focus{background:#e8f4f4;border-radius:2px;} .eye-label{font-family:'DM Mono',monospace;font-size:10px;color:var(--teal2);font-weight:500;padding:7px 11px;background:var(--warm);text-align:left;} /* ── PRACTICE CONTEXT ── */ .practice-card{border:1px solid var(--border);border-radius:2px;padding:14px 16px;margin-bottom:10px;cursor:pointer;transition:all 0.18s;display:flex;align-items:center;gap:14px;} .practice-card:hover{border-color:var(--teal);background:rgba(10,147,150,0.03);} .practice-card.selected{border-color:var(--teal2);background:rgba(10,147,150,0.06);} .practice-logo{width:40px;height:40px;border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;} .practice-info{flex:1;} .practice-name{font-family:'DM Mono',monospace;font-size:12px;color:var(--ink2);font-weight:500;} .practice-detail{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:2px;line-height:1.6;} .delegation-badge{font-family:'DM Mono',monospace;font-size:8px;} /* ── PATIENT VIEW ── */ .rx-preview{border:2px solid var(--teal2);border-radius:3px;padding:26px 30px;background:white;position:relative;} .rx-preview::before{content:'VERIFIED PRESCRIPTION';position:absolute;top:-1px;right:18px;background:var(--teal2);color:white;font-family:'DM Mono',monospace;font-size:8px;letter-spacing:0.18em;padding:3px 9px;border-radius:0 0 3px 3px;} .rx-preview-title{font-size:21px;font-weight:600;color:var(--ink2);margin-bottom:3px;} .rx-preview-sub{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);margin-bottom:18px;} .rx-meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px;} .rx-meta-item label{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:0.18em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:1px;} .rx-meta-item span{font-size:13px;color:var(--ink);} .recall-band{background:rgba(10,147,150,0.06);border:1px solid rgba(10,147,150,0.22);border-radius:2px;padding:11px 14px;margin-top:12px;font-family:'DM Mono',monospace;font-size:10px;color:var(--teal2);display:flex;align-items:center;gap:9px;} .dual-sig-band{background:rgba(45,106,79,0.05);border:1px solid rgba(45,106,79,0.2);border-radius:2px;padding:11px 14px;margin-top:10px;font-family:'DM Mono',monospace;font-size:9px;color:var(--green);line-height:1.8;} /* ── REGISTRY ── */ .trust-node{display:flex;gap:14px;align-items:flex-start;padding:14px 0;border-bottom:1px solid var(--border);} .trust-node:last-child{border-bottom:none;} .trust-icon{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;border:1.5px solid var(--border);background:white;} .trust-body{flex:1;} .trust-title{font-family:'DM Mono',monospace;font-size:11px;color:var(--ink2);font-weight:500;margin-bottom:3px;} .trust-desc{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);line-height:1.75;} .registry-table{width:100%;border-collapse:collapse;font-family:'DM Mono',monospace;font-size:11px;} .registry-table th{background:var(--warm);padding:9px 11px;text-align:left;font-size:9px;letter-spacing:0.15em;text-transform:uppercase;color:var(--teal2);border:1px solid var(--border);} .registry-table td{padding:9px 11px;border:1px solid var(--border);vertical-align:top;line-height:1.5;} .registry-table tr:hover td{background:rgba(10,147,150,0.02);} .check-list{display:flex;flex-direction:column;gap:7px;} .check-item{display:flex;align-items:center;gap:10px;font-family:'DM Mono',monospace;} .check-label{color:var(--muted);flex:1;font-size:10px;} .check-value{color:var(--ink);font-size:10px;} #qr-container{display:flex;flex-direction:column;align-items:center;} #qr-container canvas,#qr-container img{border:7px solid white;box-shadow:var(--shadow);} @media print{header,nav,.no-print{display:none!important;}main{padding:0;max-width:100%;}body{background:white;}.card{box-shadow:none;border:1px solid #ccc;}} @media(max-width:600px){header{padding:12px 14px;}nav{padding:0 6px;}nav button{padding:11px 9px;font-size:9px;}main{padding:16px 10px;}.rx-meta-grid{grid-template-columns:1fr;}}
+RxVerify
+PRACTITIONER PORTAL
+ACCESS PASSWORD
+SIGN IN
+RxVerify
+UK Digital Prescription
+Not signed in
+Complete identity verification first
+① Register ② Practice / Locum ③ Issue Rx ④ Verify ⑤ Patient View ⑥ Registry
+One-time identity setup. Your keypair is generated on your device and never transmitted. Verification proves to the registry that you are the actual GOC registrant — not someone who looked up your name on the public GOC list.
+①Details & Keys
+②GOC Email
+③ID Upload
+④Confirmed
+Step 1 — Your Details & Identity Keypair
+Enter your details exactly as they appear on the GOC register. Your keypair is generated locally — the private key never leaves this device.
+Full Name (as on GOC register) Dr. Sarah Patel
+GOC Registration No. 01-23456
+GOC-Registered Email Address
+Qualification
+            Optometrist
+            Dispensing Optician
+            Therapeutic Optometrist
+          
+⟳ Generate My Identity Keypair
+Step 2 — Verify Your GOC-Registered Email
+We send a one-time verification code to the email address on your GOC registration record. This proves you are the actual registrant — not someone who copied your details from the public GOC list. The email on the GOC register is not public; only you have access to it.
+GOC-Registered Email (from step 1)
+📧 Send Verification Code
+← Back
+Step 3 — Identity Document Upload
+Upload a photo of your GOC registration certificate or a government-issued photo ID. This is reviewed by the RxVerify team (or an automated ID verification service like Onfido/Yoti in production) before your public key is approved on the registry. This step prevents someone from impersonating you even if they know your GOC email.
+OPTION A — GOC CERTIFICATE
+📄
+Click to upload GOC registration certificate
+
+OPTION B — PHOTO ID + SELFIE
+🪪
+Click to upload passport / driving licence + selfie
+
+What happens next: Your documents are reviewed within 1 working day (production: within minutes via automated ID verification). You'll receive an email when your public key is approved and live on the registry. Until approved, you can still use the tool locally — your prescriptions will be marked as "pending registry verification".
+Submit for Verification
+← Back
+Step 4 — Verification Submitted
+✓ Your identity verification has been submitted successfully.
+Name: —
+GOC: —
+Email verified: ✓
+ID document: Under review (demo: auto-approved)
+Registry status: Pending Approval
+
+While pending, your keypair is marked unverified in the registry. Prescriptions you issue are cryptographically signed but verifiers will see a "pending" flag next to your entry. Once approved, all previously issued prescriptions automatically become fully verified — the signature is what matters, not when the registry entry was approved.
+⚡ Demo: Simulate Registry Approval
+Next: Set Up Practice →
+
+Practice identity & locum delegation. A prescription carries two layers: your personal GOC identity and the practice you're prescribing from. Locums link their GOC keypair to each practice via a signed delegation certificate — valid for a defined period.
+Two-Layer Identity Model
+LAYER 1 — YOUR GOC IDENTITY (PERMANENT)
+One keypair per optometrist
+Anchored to GOC registration
+Never changes between practices
+Verified once at registration
+Signs every prescription you issue
+LAYER 2 — PRACTICE CONTEXT (PER-LOCATION)
+One keypair per practice
+Managed by superintendent OD
+Carries branding, address, logo
+Locums issued delegation certs
+Co-signs prescriptions issued there
+Locum example: Dr. Patel works at Vision Express on Monday, Specsavers on Wednesday, and her own practice on Saturday. She has one GOC keypair (hers forever) and three delegation certificates — one from each practice, each time-limited and co-signed by the superintendent. Each prescription shows the correct practice branding and address for that day.
+My Practice — Register or Load
+If you own or manage a practice, register it here. This generates a practice keypair. If you are a locum, skip to "Locum Delegation" below.
+Practice Name Patel Opticians
+Practice GOC/CQC Registration No. CQC-1234567
+Address Line 1 42 High Street
+City / Postcode London W1A 1AA
+Practice Phone 020 7000 0000
+Practice Email
+Brand Colour (hex) #005f73
+Logo Emoji (placeholder) 👁
+⟳ Generate Practice Keypair
+
+Locum Delegation — Request or Issue a Certificate
+A delegation certificate is signed by both parties: the optometrist's GOC keypair and the practice keypair. It authorises the optometrist to prescribe on behalf of the practice for a defined period. In production, the practice superintendent issues this; the locum accepts it.
+No practices registered yet. Register a practice above, or add demo practices below.
++ Add Demo Locum Practices
+Import from PMS PDF
+Drag your prescription PDF here to auto-populate the form. Patient details and refraction values will be extracted automatically.
+📄
+Drop Prescription PDF here
+or click to browse
+Patient Details
+Patient Full Name
+Date of Birth
+NHS Number (optional)
+Email (for recall)
+Mobile (for recall SMS)
+Name & DOB are hashed — no PII stored in the signed prescription.
+Spectacle Refraction
+
+Sphere
+Cylinder
+Axis
+Add
+Prism
+Base
+R (OD)
+
+
+
+
+
+
+L (OS)
+
+
+
+
+
+
+PD (mm)
+Near PD (mm)
+BVD (mm)
+Test Type
+          Standard Sight Test
+          Contact Lens Assessment
+          Low Vision Assessment
+          Domiciliary Visit
+        
+Recommended Lens
+          No recommendation
+          Single Vision
+          Bifocal
+          Varifocal / Progressive
+          Reading Only
+          Occupational
+        
+Clinical Notes
+Recall Period
+6 months
+1 year
+2 years
+3 years
+Custom…
+
+
+
+Patient consents to recall notifications (email/SMS) per UK GDPR
+✎ Sign & Issue Prescription
+
+Paste a signed prescription JSON to verify. In production, pharmacies scan the QR code. Anyone can verify — no account needed.
+Paste Signed Prescription JSON
+⟳ Verify Prescription
+
+Simulate tampering (demo)
+← Load Last Issued
+
+No prescription issued yet. Go to Issue Rx first.
+The public registry is how anyone can independently confirm a public key belongs to a GOC-registered optometrist. It also shows practice keypairs and delegation certificates — the full trust chain.
+Trust Chain — How Verification Works End to End
+🏛
+1. GOC — Root of Trust
+The GOC public register (optical.org/goc/registrants) is the authoritative source. In production, RxVerify works with the GOC to establish a verified key registry — similar to how NHS Digital operates the NHS Login identity service. The GOC-registered email address is the binding mechanism: only the actual registrant can access that inbox.
+🔑
+2. Identity Verification — Multi-Factor Binding
+Optometrist submits: GOC number + name (public) → verified GOC email OTP (proves inbox access) → photo of GOC certificate or government ID + selfie (proves physical identity). Human review (or automated Onfido/Yoti in production) approves before the public key is published. This prevents anyone from harvesting the public GOC list and impersonating registrants.
+📋
+3. Transparency Log — Append-Only Public Record
+Every key registration, practice registration, delegation certificate, and revocation is written to an append-only transparency log. Entries are chained and timestamped — nothing can be altered retroactively. Anyone can download the full log and audit it. Revocations don't delete entries; they add a signed revocation event, so historical prescriptions remain verifiable.
+🏥
+4. Practice Layer — Dual Keypairs for Locums
+Practices register their own keypair (managed by superintendent). Locums receive signed delegation certificates — valid for a defined period, co-signed by both parties. Every prescription carries both the optometrist's GOC signature and the practice co-signature. Verifiers confirm: is this person GOC-registered? Are they currently delegated to this practice? Both must be true.
+✅
+5. Dual Cross-Check — Cryptography + GOC Register
+Even if RxVerify's registry went offline, verifiers can still cross-reference the GOC number embedded in every prescription directly against the GOC public register. The cryptography proves the prescription is unmodified; the registry + GOC register prove the signer is who they claim to be. No single point of failure.
+Live Demo Registry — Registered Optometrists
+No entries yet — complete the Register tab to populate this.
+Live Demo Registry — Registered Practices
+No practices registered yet.
+Live Demo Registry — Active Delegation Certificates
+No delegation certificates issued yet.
+Verify a GOC Number or Public Key
+GOC Number or Public Key (hex)
+🔍 Look Up
+
+
+GET /api/v1/registry/optometrist/{goc_number}
+GET /api/v1/registry/pubkey/{hex}
+GET /api/v1/registry/practice/{practice_id}
+GET /api/v1/registry/delegations/{goc_number}
+GET /api/v1/registry/log
