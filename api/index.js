@@ -81,6 +81,7 @@ const FRONTEND_HTML = `<!DOCTYPE html>
   margin-top:10px;display:none;
 }
 </style>
+<style>
 :root{
   --ink:#1a1a2e;--ink2:#2d3561;--teal:#0a9396;--teal2:#005f73;
   --cream:#fdfcf7;--warm:#f4f1e8;--border:#d8d4c8;--muted:#8a8070;
@@ -1057,6 +1058,1085 @@ function hb(hex){
 function shortH(h,n=10){return h?\`\${h.slice(0,n)}…\${h.slice(-5)}\`:'—';}
 function tsD(ts){return new Date(ts*1000).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});}
 function fmtR(v,f){if(v===null||v===undefined||v==='')return'—';if(f==='axis')return\`\${v}°\`;const n=parseFloat(v);return n>=0?\`+\${n.toFixed(2)}\`:n.toFixed(2);}
+
+// ═══════════════ RECALL ═══════════════
+function setRecall(val,el){
+  document.querySelectorAll('.recall-pill').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');
+  const cr=document.getElementById('recall-custom-row');
+  cr.style.display=val==='custom'?'flex':'none';
+  if(val!=='custom') recallMonths=val;
+  updateRecallSummary();
+}
+function updateRecallSummary(){
+  if(document.getElementById('recall-custom-row').style.display!=='none'){
+    const v=parseInt(document.getElementById('recall-custom-val').value);
+    if(v) recallMonths=v;
+  }
+  const d=new Date(); d.setMonth(d.getMonth()+recallMonths);
+  const dStr=d.toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
+  const label=recallMonths===6?'6 months':recallMonths===12?'1 year':recallMonths===24?'2 years':recallMonths===36?'3 years':\`\${recallMonths} months\`;
+  document.getElementById('recall-summary').innerHTML=
+    \`📅 Patient due for recall in <strong>\${label}</strong> — approximately <strong>\${dStr}</strong>.\`;
+}
+
+// ═══════════════ WIZARD ═══════════════
+function goWizard(step){
+  document.querySelectorAll('.verif-panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.wstep').forEach((s,i)=>{
+    s.classList.remove('active','done');
+    if(i+1<step) s.classList.add('done');
+    if(i+1===step) s.classList.add('active');
+  });
+  document.getElementById('vp'+step).classList.add('active');
+  if(step===2) document.getElementById('verif-email-display').value=document.getElementById('setup-email').value;
+}
+
+// ═══════════════ KEYGEN ═══════════════
+async function generateKeys(){
+  const name=document.getElementById('setup-name').value.trim();
+  const goc=document.getElementById('setup-goc').value.trim();
+  if(!name||!goc){alert('Please enter your name and GOC number.');return;}
+  const{pubHex,privHex}=await genKP();
+  STATE.pubHex=pubHex; STATE.privHex=privHex;
+  STATE.prescriber={name,goc,email:document.getElementById('setup-email').value.trim(),
+    qual:document.getElementById('setup-qual').value,pubHex};
+  setEl('pub-key-display',shortH(pubHex,20),pubHex);
+  setEl('priv-key-display',shortH(privHex,20),privHex);
+  document.getElementById('keys-card').style.display='block';
+
+  // Auto-register in Supabase registry
+  try {
+    await fetch(\`\${API_URL}/api/registry/auto-register\`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        npub: pubHex,
+        goc_number: goc,
+        name: name,
+        practice: document.getElementById('setup-practice')?.value?.trim() || null,
+        jurisdiction: 'UK-GOC'
+      })
+    });
+    STATE.registryStatus = 'approved';
+  } catch(e) {
+    console.warn('Registry auto-register failed:', e.message);
+  }
+
+  updateHeader();
+}
+function setEl(id,txt,full){const e=document.getElementById(id);e.textContent=txt;e.dataset.full=full;}
+function copyEl(el){
+  navigator.clipboard?.writeText(el.dataset.full||el.textContent);
+  const o=el.textContent;el.textContent='Copied!';setTimeout(()=>el.textContent=o,1200);
+}
+function updateHeader(){
+  if(!STATE.prescriber)return;
+  document.getElementById('header-info').innerHTML=
+    \`<div><span>\${STATE.prescriber.name}</span></div><div>GOC \${STATE.prescriber.goc} · <span style="color:\${STATE.registryStatus==='approved'?'#22c55e':'#92600a'}">\${STATE.registryStatus}</span></div>\`;
+}
+function downloadKeys(){
+  if(!STATE.pubHex)return;
+  const t=\`RxVerify Identity Keys\\nGenerated: \${new Date().toISOString()}\\n\${STATE.prescriber.name} · GOC \${STATE.prescriber.goc}\\n\\nPUBLIC KEY:\\n\${STATE.pubHex}\\n\\nPRIVATE KEY (NEVER SHARE):\\n\${STATE.privHex}\`;
+  const a=document.createElement('a');
+  a.href='data:text/plain;charset=utf-8,'+encodeURIComponent(t);
+  a.download=\`rxverify-keys-\${STATE.prescriber.goc.replace(/\\W/g,'_')}.txt\`;
+  a.click();
+}
+function saveKeysToStorage(){
+  if(!STATE.pubHex)return;
+  localStorage.setItem('rxverify_state',JSON.stringify(STATE));
+  alert('Keys saved to this browser.');
+}
+function loadSavedKeys(){
+  const s=localStorage.getItem('rxverify_state');
+  if(!s){alert('No saved keys found.');return;}
+  Object.assign(STATE,JSON.parse(s));
+  if(STATE.pubHex){
+    setEl('pub-key-display',shortH(STATE.pubHex,20),STATE.pubHex);
+    setEl('priv-key-display',shortH(STATE.privHex,20),STATE.privHex);
+    document.getElementById('keys-card').style.display='block';
+    document.getElementById('setup-name').value=STATE.prescriber?.name||'';
+    document.getElementById('setup-goc').value=STATE.prescriber?.goc||'';
+    if(STATE.prescriber) REGISTRY.optometrists[STATE.pubHex]={...STATE.prescriber,status:STATE.registryStatus||'unverified',registeredAt:new Date().toISOString()};
+    updateHeader();
+    alert('Keys loaded.');
+    // Re-register in Supabase (ensures registry is current after page reload)
+    if(STATE.prescriber) {
+      fetch(\`\${API_URL}/api/registry/auto-register\`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          npub: STATE.pubHex,
+          goc_number: STATE.prescriber.goc,
+          name: STATE.prescriber.name,
+          practice: STATE.prescriber.practice || null,
+          jurisdiction: 'UK-GOC'
+        })
+      }).then(() => {
+        STATE.registryStatus = 'approved';
+        updateHeader();
+      }).catch(e => console.warn('Re-register failed:', e.message));
+    }
+  }
+}
+
+// ═══════════════ EMAIL OTP (simulated) ═══════════════
+function simulateSendCode(){
+  document.getElementById('code-sent-area').style.display='block';
+}
+function verifyOTP(){
+  const code=document.getElementById('otp-input').value.trim();
+  const res=document.getElementById('otp-result');
+  if(code==='482916'){
+    STATE.emailVerified=true;
+    res.innerHTML='<div class="alert alert-success">✓ Email verified successfully. Your GOC-registered email confirms your identity.</div>';
+    setTimeout(()=>goWizard(3),1400);
+  } else {
+    res.innerHTML='<div class="alert alert-error">✗ Incorrect code. Demo code is 482916.</div>';
+  }
+}
+
+// ═══════════════ ID UPLOAD (simulated) ═══════════════
+function simulateUpload(zoneId,statusId){
+  const zone=document.getElementById(zoneId);
+  const stat=document.getElementById(statusId);
+  zone.classList.add('has-file');
+  stat.innerHTML='<span style="font-family:\\'DM Mono\\',monospace;font-size:9px;color:var(--green);">✓ File selected (demo)</span>';
+  STATE.idUploaded=true;
+  document.getElementById('submit-verif-btn').disabled=false;
+}
+function submitForVerification(){
+  document.getElementById('conf-name').textContent=STATE.prescriber?.name||'—';
+  document.getElementById('conf-goc').textContent=STATE.prescriber?.goc||'—';
+  REGISTRY.optometrists[STATE.pubHex]={...STATE.prescriber,status:'pending',registeredAt:new Date().toISOString()};
+  STATE.registryStatus='pending';
+  updateHeader();
+  goWizard(4);
+}
+function approveDemo(){
+  if(!STATE.pubHex){alert('Generate keys first.');return;}
+  REGISTRY.optometrists[STATE.pubHex].status='approved';
+  STATE.registryStatus='approved';
+  document.getElementById('conf-reg-status').textContent='Approved ✓';
+  document.getElementById('conf-reg-status').className='badge badge-valid';
+  document.getElementById('approval-result').innerHTML='<div class="alert alert-success">✓ Registry entry approved. Your public key is now live and verifiable by anyone.</div>';
+  updateHeader();
+  renderRegistryTab();
+}
+
+// ═══════════════ PRACTICE ═══════════════
+async function registerPractice(){
+  const name=document.getElementById('prac-name').value.trim();
+  const reg=document.getElementById('prac-reg').value.trim();
+  if(!name||!reg){alert('Practice name and registration number required.');return;}
+  const{pubHex,privHex}=await genKP();
+  const practice={
+    id:'RXP-'+Math.random().toString(36).slice(2,7).toUpperCase(),
+    name,reg,pubHex,privHex,
+    addr1:document.getElementById('prac-addr1').value.trim(),
+    addr2:document.getElementById('prac-addr2').value.trim(),
+    phone:document.getElementById('prac-phone').value.trim(),
+    email:document.getElementById('prac-email').value.trim(),
+    colour:document.getElementById('prac-colour').value.trim()||'#005f73',
+    emoji:document.getElementById('prac-emoji').value.trim()||'👁',
+    isOwn:true,
+    registeredAt:new Date().toISOString(),
+  };
+  REGISTRY.practices[pubHex]=practice;
+  STATE.activePractice={...practice,isLocum:false,delegation:null};
+  document.getElementById('practice-keys-result').innerHTML=\`
+    <div class="alert alert-success">✓ Practice keypair generated and registered.<br>
+    Practice ID: <strong>\${practice.id}</strong> · Pubkey: <code style="font-size:9px;">\${shortH(pubHex,16)}</code></div>\`;
+  refreshPracticeTab();
+  renderRegistryTab();
+}
+
+function addDemoPractices(){
+  const demos=[
+    {name:'Vision Express — Canary Wharf',reg:'CQC-9876001',addr1:'Jubilee Place',addr2:'London E14 5NY',emoji:'👓',colour:'#c0392b'},
+    {name:'Specsavers — Oxford Street',reg:'CQC-9876002',addr1:'350 Oxford Street',addr2:'London W1C 1JH',emoji:'🔍',colour:'#1a5276'},
+  ];
+  demos.forEach(async d=>{
+    const{pubHex,privHex}=await genKP();
+    const p={...d,pubHex,privHex,id:'RXP-'+Math.random().toString(36).slice(2,7).toUpperCase(),isOwn:false,registeredAt:new Date().toISOString()};
+    REGISTRY.practices[pubHex]=p;
+  });
+  setTimeout(()=>{refreshPracticeTab();renderRegistryTab();},300);
+}
+
+function refreshPracticeTab(){
+  const practices=Object.values(REGISTRY.practices);
+  const list=document.getElementById('my-practices-list');
+  const form=document.getElementById('delegation-form');
+  const sel=document.getElementById('deleg-practice');
+  const activeCard=document.getElementById('active-context-card');
+  const opts=document.getElementById('context-options');
+
+  if(!practices.length){
+    list.innerHTML='<div style="font-family:\\'DM Mono\\',monospace;font-size:11px;color:var(--muted);padding:14px;border:1px dashed var(--border);border-radius:2px;text-align:center;">No practices registered yet.</div>';
+    form.style.display='none'; activeCard.style.display='none'; return;
+  }
+
+  list.innerHTML=practices.map(p=>\`
+    <div class="practice-card" onclick="setActivePractice('\${p.pubHex}',false)" id="pc-\${p.pubHex}">
+      <div class="practice-logo" style="background:\${p.colour}15;color:\${p.colour};">\${p.emoji}</div>
+      <div class="practice-info">
+        <div class="practice-name">\${p.name}</div>
+        <div class="practice-detail">\${p.reg} · \${p.addr1}, \${p.addr2}</div>
+      </div>
+      \${p.isOwn?'<span class="badge badge-valid" style="font-size:8px;">Owner</span>':'<span class="badge badge-info" style="font-size:8px;">Locum</span>'}
+    </div>\`).join('');
+
+  // Set today's dates for delegation form
+  const today=new Date().toISOString().split('T')[0];
+  const yrAhead=new Date(Date.now()+365*86400000).toISOString().split('T')[0];
+  document.getElementById('deleg-from').value=today;
+  document.getElementById('deleg-until').value=yrAhead;
+
+  sel.innerHTML=practices.map(p=>\`<option value="\${p.pubHex}">\${p.name}</option>\`).join('');
+  form.style.display='block';
+  activeCard.style.display='block';
+
+  opts.innerHTML=practices.map(p=>\`
+    <div class="practice-card" onclick="setActivePractice('\${p.pubHex}',false)" id="ctx-\${p.pubHex}">
+      <div class="practice-logo" style="background:\${p.colour}15;color:\${p.colour};">\${p.emoji}</div>
+      <div class="practice-info">
+        <div class="practice-name">\${p.name}</div>
+        <div class="practice-detail">\${p.addr1}, \${p.addr2}</div>
+      </div>
+    </div>\`).join('');
+}
+
+function setActivePractice(pubHex, isLocum){
+  const p=REGISTRY.practices[pubHex];
+  if(!p)return;
+  const deleg=REGISTRY.delegations.find(d=>d.practicePubHex===pubHex&&d.odPubHex===STATE.pubHex);
+  STATE.activePractice={...p,isLocum,delegation:deleg||null};
+  document.querySelectorAll('.practice-card').forEach(c=>c.classList.remove('selected'));
+  document.querySelectorAll(\`#pc-\${pubHex},#ctx-\${pubHex}\`).forEach(c=>c.classList.add('selected'));
+  document.getElementById('selected-context-display').innerHTML=\`<div class="alert alert-success">✓ Active context: <strong>\${p.name}</strong>\${isLocum?' (locum — delegation certificate active)':' (practice owner)'}</div>\`;
+  updateIssueBanner();
+}
+
+async function issueDelegation(){
+  if(!STATE.pubHex){alert('Generate your GOC keypair first.');return;}
+  const pracPubHex=document.getElementById('deleg-practice').value;
+  const prac=REGISTRY.practices[pracPubHex];
+  if(!prac){alert('Practice not found.');return;}
+  const from=document.getElementById('deleg-from').value;
+  const until=document.getElementById('deleg-until').value;
+
+  const certPayload={
+    type:'delegation_certificate',
+    schema_version:'delv1-uk',
+    issued_at:Math.floor(Date.now()/1000),
+    optometrist:{pubkey:STATE.pubHex,goc:STATE.prescriber?.goc,name:STATE.prescriber?.name},
+    practice:{pubkey:pracPubHex,id:prac.id,name:prac.name,reg:prac.reg},
+    valid_from:from, valid_until:until,
+  };
+  const sigOD=await signJ(certPayload,STATE.privHex);
+  const sigPrac=await signJ(certPayload,prac.privHex);
+  const cert={...certPayload,sig_optometrist:sigOD,sig_practice:sigPrac,
+    practicePubHex,odPubHex:STATE.pubHex};
+  REGISTRY.delegations.push(cert);
+
+  document.getElementById('delegation-result').innerHTML=\`
+    <div class="card" style="margin-top:0;border-color:rgba(45,106,79,0.35);">
+      <div class="badge badge-valid" style="margin-bottom:10px;">✓ Delegation Certificate Issued</div>
+      <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);line-height:1.9;">
+        <div>Practice: <span style="color:var(--ink)">\${prac.name}</span></div>
+        <div>Valid: <span style="color:var(--ink)">\${from} → \${until}</span></div>
+        <div>Signed by OD: <span style="color:var(--ink)">\${shortH(sigOD,14)}</span></div>
+        <div>Co-signed by practice: <span style="color:var(--ink)">\${shortH(sigPrac,14)}</span></div>
+      </div>
+      <button class="btn btn-ghost" style="margin-top:10px;" onclick="setActivePractice('\${pracPubHex}',true)">→ Set as Active Prescribing Context</button>
+    </div>\`;
+  renderRegistryTab();
+}
+
+// ═══════════════ ISSUE TAB ═══════════════
+function refreshIssueTab(){
+  document.getElementById('no-key-warn').style.display=STATE.pubHex?'none':'block';
+  document.getElementById('no-context-warn').style.display=STATE.activePractice?'none':'block';
+  document.getElementById('issue-btn').disabled=!STATE.pubHex||!STATE.activePractice;
+  updateIssueBanner();
+  updateRecallSummary();
+}
+function updateIssueBanner(){
+  const p=STATE.activePractice;
+  const banner=document.getElementById('active-context-banner');
+  if(!p){banner.style.display='none';return;}
+  banner.style.display='block';
+  document.getElementById('banner-logo').style.background=p.colour+'20';
+  document.getElementById('banner-logo').style.color=p.colour;
+  document.getElementById('banner-logo').textContent=p.emoji;
+  document.getElementById('banner-name').textContent=p.name;
+  document.getElementById('banner-detail').textContent=\`\${p.addr1}, \${p.addr2} · \${p.reg}\`;
+  const db=document.getElementById('banner-deleg-badge');
+  db.style.display=p.isLocum?'inline-flex':'none';
+}
+
+// ═══════════════ BACKEND API ═══════════════
+// Point this at your Vercel deployment URL
+// For local testing: 'http://localhost:3000'
+const API_URL = 'https://www.rxverify.co.uk';
+
+async function saveToBackend(signedRx, shortCode) {
+  try {
+    const resp = await fetch(\`\${API_URL}/api/prescriptions\`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ signed_payload: signedRx, short_code: shortCode })
+    });
+    return resp.ok ? await resp.json() : null;
+  } catch(e) {
+    console.warn('Backend save failed (offline mode):', e.message);
+    return null;
+  }
+}
+
+async function sendEmailToPatient(signedRx, shortCode, toEmail) {
+  try {
+    const rx = signedRx.rx || {};
+    const resp = await fetch(\`\${API_URL}/api/send/email\`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to_email: toEmail,
+        patient_name: signedRx.patient?.display_name,
+        patient_dob: signedRx.patient?.display_dob,
+        short_code: shortCode,
+        practice_name: signedRx.practice?.name || signedRx.prescriber?.name,
+        prescriber_name: signedRx.prescriber?.name,
+        goc_number: signedRx.prescriber?.goc,
+        issued_date: tsD(signedRx.issued_at),
+        expires_date: tsD(signedRx.expires_at),
+        recall_date: signedRx.recall?.due_date,
+        rx_summary: {
+          r_sphere: rx.right?.sphere, r_cyl: rx.right?.cylinder, r_axis: rx.right?.axis,
+          r_add: rx.right?.add,
+          l_sphere: rx.left?.sphere,  l_cyl: rx.left?.cylinder,  l_axis: rx.left?.axis,
+          l_add: rx.left?.add,
+          clinical_notes: signedRx.rx?.notes || null
+        },
+        full_payload: signedRx  // ← full signed prescription for URL fragment
+      })
+    });
+    return resp.ok;
+  } catch(e) {
+    console.warn('Email send failed:', e.message);
+    return false;
+  }
+}
+
+function generateShortCode() {
+  // Generates RXV-XXXXX-X format
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const part1 = Array.from({length:5}, () => chars[Math.floor(Math.random()*chars.length)]).join('');
+  const part2 = chars[Math.floor(Math.random()*chars.length)];
+  return \`RXV-\${part1}-\${part2}\`;
+}
+
+async function issuePrescription(){
+  if(!STATE.pubHex||!STATE.activePractice){return;}
+  const ptName=document.getElementById('pt-name').value.trim();
+  const ptDob=document.getElementById('pt-dob').value;
+  if(!ptName||!ptDob){alert('Patient name and date of birth required.');return;}
+  document.getElementById('issue-status').textContent='Signing…';
+
+  const v=id=>{const x=document.getElementById(id).value;return x===''?null:parseFloat(x)||null;};
+  const s=id=>document.getElementById(id).value.trim()||null;
+  const now=Math.floor(Date.now()/1000);
+  const recallDate=new Date(); recallDate.setMonth(recallDate.getMonth()+recallMonths);
+
+  const patRef=await sha256h(\`\${ptDob}|\${ptName.toLowerCase().replace(/\\s+/g,' ')}\`);
+  const contH=s('pt-email')?await sha256h(document.getElementById('pt-email').value.toLowerCase()):null;
+
+  const p=STATE.activePractice;
+  const payload={
+    schema_version:'rxv1-uk',
+    issued_at:now, expires_at:now+(60*60*24*730),
+    prescriber:{
+      pubkey:STATE.pubHex, goc:STATE.prescriber.goc, name:STATE.prescriber.name,
+      qual:STATE.prescriber.qual, jurisdiction:'UK-GOC',
+    },
+    practice:{
+      pubkey:p.pubHex, id:p.id, name:p.name, reg:p.reg,
+      addr1:p.addr1, addr2:p.addr2, emoji:p.emoji, colour:p.colour,
+    },
+    delegation:p.delegation?{valid_from:p.delegation.valid_from,valid_until:p.delegation.valid_until}:null,
+    patient:{ref:patRef,contact_hash:contH,display_name:ptName,display_dob:ptDob,
+      // Include contact details so backend can store for recall notifications
+      // These are not written to prescription_registry — only to recall_contacts
+      contact_email: s('pt-email') || null,
+      contact_mobile: s('pt-mobile') || null,
+    },
+    rx:{
+      right:{sphere:v('r-sph'),cylinder:v('r-cyl'),axis:v('r-axis'),add:v('r-add'),prism:v('r-prism'),base:s('r-base')},
+      left:{sphere:v('l-sph'),cylinder:v('l-cyl'),axis:v('l-axis'),add:v('l-add'),prism:v('l-prism'),base:s('l-base')},
+      pd:v('pd'),pd_near:v('pd-near'),bvd:v('bvd')||12,
+      recommended_lens:s('lens-rec'),notes:s('notes'),
+    },
+    recall:{months:recallMonths,due_at:Math.floor(recallDate.getTime()/1000),due_date:recallDate.toISOString().split('T')[0]},
+    test_type:document.getElementById('test-type').value,
+    consent:{recall:document.getElementById('consent-recall').checked,timestamp:now},
+    metadata:{software:'RxVerify/1.0-uk',issued_under:'Opticians Act 1989 + Electronic Communications Act 2000'},
+  };
+
+  try{
+    const shortCode = generateShortCode();
+    const sigOD=await signJ(payload,STATE.privHex);
+    let sigPrac=null;
+    if(p.privHex) sigPrac=await signJ(payload,p.privHex);
+    const signedRx={...payload,sig_optometrist:sigOD,sig_practice:sigPrac,prescription_id:shortCode};
+    STATE.lastIssuedRx=signedRx;
+
+    // Save to backend (non-blocking — works offline too)
+    document.getElementById('issue-status').textContent='Saving…';
+    const saved = await saveToBackend(signedRx, shortCode);
+    const patientLink = saved?.patient_link || \`https://rxverify.co.uk/v/\${shortCode}\`;
+
+    // Send email if patient email provided
+    const ptEmail = document.getElementById('pt-email').value.trim();
+    let emailSent = false;
+    if(ptEmail && saved) {
+      document.getElementById('issue-status').textContent='Sending…';
+      emailSent = await sendEmailToPatient(signedRx, shortCode, ptEmail);
+    }
+
+    document.getElementById('issue-status').textContent='';
+    document.getElementById('issue-result').style.display='block';
+    document.getElementById('issue-result').innerHTML=\`
+      <div class="card" style="border-color:rgba(45,106,79,0.35);">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+          <span class="badge badge-valid">✓ Signed · \${tsD(now)}</span>
+          \${saved?'<span class="badge badge-valid">✓ Saved to server</span>':'<span class="badge badge-warn">⚠ Offline — local only</span>'}
+          \${emailSent?'<span class="badge badge-valid">✓ Email sent</span>':''}
+        </div>
+        <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);line-height:1.9;margin-top:6px;">
+          <div>Practice: <span style="color:var(--ink)">\${p.name}</span></div>
+          <div>Prescription ID: <span style="color:var(--teal2);font-weight:500;">\${shortCode}</span></div>
+          <div>Recall due: <span style="color:var(--teal2);font-weight:500;">\${signedRx.recall.due_date}</span> (\${recallMonths} months)</div>
+          <div>Patient link: <a href="\${patientLink}" target="_blank" style="color:var(--teal2);">\${patientLink}</a></div>
+        </div>
+        <div style="display:flex;gap:9px;margin-top:12px;flex-wrap:wrap;">
+          <button class="btn btn-primary" onclick="showTab('patient')">→ View Patient Copy</button>
+          <button class="btn btn-ghost" onclick="showTab('verify')">⟳ Test Verify</button>
+          <button class="btn btn-ghost" onclick="navigator.clipboard?.writeText('\${patientLink}');this.textContent='Copied!';setTimeout(()=>this.textContent='⎘ Copy Link',1500)">⎘ Copy Link</button>
+          <button class="btn btn-ghost" onclick="clearIssueForm()" style="border-color:var(--teal2);color:var(--teal2);">+ New Prescription</button>
+        </div>
+      </div>\`;
+    showTab('patient');
+  }catch(e){document.getElementById('issue-status').textContent='Error: '+e.message;console.error(e);}
+}
+
+// ═══════════════ PDF EXTRACTION ═══════════════
+
+function handlePDFDrop(event) {
+  event.preventDefault();
+  const dz = document.getElementById('drop-zone');
+  dz.style.borderColor = 'rgba(10,147,150,0.35)';
+  dz.style.background   = 'rgba(10,147,150,0.04)';
+  const file = event.dataTransfer.files[0];
+  if (file && file.type === 'application/pdf') {
+    handlePDFFile(file);
+  } else {
+    showExtractStatus('Please drop a PDF file', 'error');
+  }
+}
+
+async function handlePDFFile(file) {
+  if (!file) return;
+  showExtractStatus('Reading prescription PDF…', 'loading');
+
+  try {
+    // Convert PDF to base64
+    const base64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+    showExtractStatus('Extracting prescription data with AI…', 'loading');
+
+    const resp = await fetch(\`\${API_URL}/api/extract\`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pdf_base64: base64 })
+    });
+
+    if (!resp.ok) {
+      const errData = await resp.json().catch(() => ({}));
+      throw new Error(errData.detail || errData.error || 'Extraction service error');
+    }
+    const data = await resp.json();
+
+    if (!data.success) throw new Error(data.error || 'Extraction failed');
+
+    showExtractResult(data.extracted, file.name);
+
+  } catch(e) {
+    showExtractStatus('Extraction failed: ' + e.message, 'error');
+    console.error('PDF extraction error:', e);
+  }
+}
+
+function showExtractStatus(msg, type) {
+  const statusEl = document.getElementById('extract-status');
+  const textEl   = document.getElementById('extract-status-text');
+  const resultEl = document.getElementById('extract-result');
+  statusEl.style.display = 'block';
+  resultEl.style.display  = 'none';
+  textEl.textContent = msg;
+  textEl.style.color = type === 'error' ? 'var(--red,#9b2226)' : 'var(--muted)';
+}
+
+function fmtRxVal(v) {
+  if (v == null || v === '') return null;
+  const n = parseFloat(v);
+  if (isNaN(n)) return null;
+  return n >= 0 ? '+' + n.toFixed(2) : n.toFixed(2);
+}
+
+function showExtractResult(extracted, filename) {
+  const statusEl = document.getElementById('extract-status');
+  const resultEl = document.getElementById('extract-result');
+  statusEl.style.display = 'none';
+  resultEl.style.display  = 'block';
+
+  // Back-calculate ADD from near prescription (METHOD B — iCareWEB)
+  let rAdd = extracted.right_add;
+  let lAdd = extracted.left_add;
+
+  if (extracted.recording_method === 'near_calculated') {
+    // iCareWEB records near prescription, not ADD directly
+    // ADD = near_sphere - distance_sphere
+    if (extracted.right_near_sphere != null && extracted.right_sphere != null) {
+      rAdd = Math.round((extracted.right_near_sphere - extracted.right_sphere) * 4) / 4;
+    }
+    if (extracted.left_near_sphere != null && extracted.left_sphere != null) {
+      lAdd = Math.round((extracted.left_near_sphere - extracted.left_sphere) * 4) / 4;
+    }
+  }
+
+  // Build confidence summary
+  const fields = [
+    { label:'Patient Name',  val:extracted.patient_name,           id:'pt-name',  type:'text' },
+    { label:'Date of Birth', val:extracted.patient_dob,            id:'pt-dob',   type:'date' },
+    { label:'R Sphere',      val:fmtRxVal(extracted.right_sphere),  id:'r-sph',    type:'num'  },
+    { label:'R Cylinder',    val:fmtRxVal(extracted.right_cylinder),id:'r-cyl',    type:'num'  },
+    { label:'R Axis',        val:extracted.right_axis,              id:'r-axis',   type:'num'  },
+    { label:'R Add',         val:fmtRxVal(rAdd),                    id:'r-add',    type:'num'  },
+    { label:'L Sphere',      val:fmtRxVal(extracted.left_sphere),   id:'l-sph',    type:'num'  },
+    { label:'L Cylinder',    val:fmtRxVal(extracted.left_cylinder), id:'l-cyl',    type:'num'  },
+    { label:'L Axis',        val:extracted.left_axis,               id:'l-axis',   type:'num'  },
+    { label:'L Add',         val:fmtRxVal(lAdd),                    id:'l-add',    type:'num'  },
+    { label:'PD',            val:extracted.pd,                      id:'pd',       type:'num'  },
+    { label:'Notes',         val:extracted.clinical_notes,          id:'clinical-notes', type:'text' },
+  ];
+
+  const flags = extracted._validation_flags || [];
+  const method = extracted.recording_method === 'near_calculated'
+    ? 'METHOD B — Near prescription detected. ADD back-calculated.'
+    : 'METHOD A — ADD recorded directly.';
+
+  // Store extracted data for apply button
+  window._lastExtracted = {
+    patient_name: extracted.patient_name,
+    patient_dob:  extracted.patient_dob,
+    r_sphere:     extracted.right_sphere,
+    r_cyl:        extracted.right_cylinder,
+    r_axis:       extracted.right_axis,
+    r_add:        rAdd,
+    r_prism:      extracted.right_prism,
+    l_sphere:     extracted.left_sphere,
+    l_cyl:        extracted.left_cylinder,
+    l_axis:       extracted.left_axis,
+    l_add:        lAdd,
+    l_prism:      extracted.left_prism,
+    pd:           extracted.pd,
+    pd_near:      extracted.pd_near,
+    bvd:          extracted.bvd,
+    notes:        extracted.clinical_notes,
+    recall_months: extracted.recall_months
+  };
+
+  resultEl.innerHTML = \`
+    <div style="background:rgba(45,106,79,0.08);border:1px solid rgba(45,106,79,0.25);border-radius:3px;padding:12px 14px;margin-bottom:12px;">
+      <div style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.15em;text-transform:uppercase;color:#2d6a4f;margin-bottom:4px;">✓ Extraction Complete — \${filename}</div>
+      <div style="font-family:'DM Mono',monospace;font-size:10px;color:#2d6a4f;">\${method}</div>
+      \${extracted.add_difference_flagged ? '<div style="font-family:\\'DM Mono\\',monospace;font-size:10px;color:#e76f51;margin-top:4px;">⚠ ADD differs between eyes — please check</div>' : ''}
+      \${flags.length ? \`<div style="font-family:'DM Mono',monospace;font-size:10px;color:#e76f51;margin-top:4px;">⚠ \${flags.join(' · ')}</div>\` : ''}
+    </div>
+
+    <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);margin-bottom:10px;">
+      Review extracted values below — edit any field before signing.
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:7px;margin-bottom:14px;">
+      \${fields.filter(f => f.val != null && f.val !== '').map(f => \`
+        <div style="background:#f4f1e8;border-radius:2px;padding:7px 10px;">
+          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;">\${f.label}</div>
+          <div style="font-family:'DM Mono',monospace;font-size:12px;color:var(--ink2);font-weight:500;">\${f.val}</div>
+        </div>\`).join('')}
+    </div>
+
+    <div style="display:flex;gap:9px;flex-wrap:wrap;">
+      <button class="btn btn-primary" id="apply-extraction-btn">✓ Apply to Form</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('extract-result').style.display='none';">✕ Discard</button>
+    </div>\`;
+
+  // Use addEventListener to avoid inline onclick issues
+  document.getElementById('apply-extraction-btn').addEventListener('click', function() {
+    applyExtraction(window._lastExtracted);
+  });
+}
+
+function setNum(id, val) {
+  if (val != null) {
+    const el = document.getElementById(id);
+    if (el) {
+      const n = parseFloat(val);
+      if (!isNaN(n)) el.value = n.toFixed(2);
+    }
+  }
+}
+function setAxis(id, val) {
+  // Axis is always a whole number — no decimal places
+  if (val != null) {
+    const el = document.getElementById(id);
+    if (el) el.value = Math.round(parseFloat(val));
+  }
+}
+function setText(id, val) {
+  if (val != null) {
+    const el = document.getElementById(id);
+    if (el) el.value = val;
+  }
+}
+function setDOB(id, val) {
+  if (!val) return;
+  const el = document.getElementById(id);
+  if (!el) return;
+  // Convert various formats to YYYY-MM-DD for HTML date input
+  // Handles: DD/MM/YYYY, YYYY-MM-DD, DD-MM-YYYY
+  let iso = val;
+  if (/^\\d{2}\\/\\d{2}\\/\\d{4}$/.test(val)) {
+    // DD/MM/YYYY → YYYY-MM-DD
+    const [d, m, y] = val.split('/');
+    iso = \`\${y}-\${m}-\${d}\`;
+  } else if (/^\\d{2}-\\d{2}-\\d{4}$/.test(val)) {
+    // DD-MM-YYYY → YYYY-MM-DD
+    const [d, m, y] = val.split('-');
+    iso = \`\${y}-\${m}-\${d}\`;
+  }
+  el.value = iso;
+}
+
+function applyExtraction(data) {
+  // Patient details
+  if (data.patient_name) setText('pt-name', data.patient_name);
+  if (data.patient_dob)  setDOB('pt-dob', data.patient_dob);
+
+  // Refraction values — set as plain numbers for number inputs
+  setNum('r-sph',   data.r_sphere);
+  setNum('r-cyl',   data.r_cyl);
+  setAxis('r-axis', data.r_axis);
+  setNum('r-add',   data.r_add);
+  setNum('r-prism', data.r_prism);
+  setNum('l-sph',   data.l_sphere);
+  setNum('l-cyl',   data.l_cyl);
+  setAxis('l-axis', data.l_axis);
+  setNum('l-add',   data.l_add);
+  setNum('l-prism', data.l_prism);
+  setNum('pd',      data.pd);
+  setNum('pd-near', data.pd_near);  // fix: was 'near-pd', input id is 'pd-near'
+  setNum('bvd',     data.bvd);
+  if (data.notes)   setText('notes', data.notes);
+
+  // Recall period — fix: pills use class 'recall-pill', not 'recall-btn'
+  if (data.recall_months) {
+    recallMonths = data.recall_months;
+    // Match a preset pill (6/12/24/36) or fall through to custom
+    const presets = [6, 12, 24, 36];
+    document.querySelectorAll('.recall-pill').forEach(p => p.classList.remove('active'));
+    if (presets.includes(data.recall_months)) {
+      // Pills fire setRecall via onclick — find by text content match
+      document.querySelectorAll('.recall-pill').forEach(p => {
+        const months = parseInt(p.getAttribute('onclick')?.match(/setRecall\\((\\d+)/)?.[1]);
+        if (months === data.recall_months) p.classList.add('active');
+      });
+    } else {
+      // Non-preset value — activate custom pill and populate input
+      document.querySelectorAll('.recall-pill').forEach(p => {
+        if (p.getAttribute('onclick')?.includes("'custom'")) p.classList.add('active');
+      });
+      const customRow = document.getElementById('recall-custom-row');
+      if (customRow) customRow.style.display = 'flex';
+      const customInput = document.getElementById('recall-custom-val');
+      if (customInput) customInput.value = data.recall_months;
+    }
+    updateRecallSummary();
+  }
+
+  // Hide extraction UI
+  document.getElementById('extract-card').style.display = 'none';
+
+  // Scroll to patient name field and focus
+  document.getElementById('pt-name')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+  // Brief success message
+  const banner = document.createElement('div');
+  banner.style.cssText = 'position:fixed;top:20px;right:20px;background:#2d6a4f;color:white;padding:10px 18px;border-radius:3px;font-family:DM Mono,monospace;font-size:11px;z-index:9999;';
+  banner.textContent = '✓ Prescription imported — review and sign';
+  document.body.appendChild(banner);
+  setTimeout(() => banner.remove(), 3000);
+}
+
+// ═══════════════ VERIFY ═══════════════
+function clearIssueForm(){
+  // Clear patient fields
+  const fields = ['pt-name','pt-dob','pt-nhs','pt-email','pt-mobile',
+    'r-sph','r-cyl','r-axis','r-add','r-prism','r-base',
+    'l-sph','l-cyl','l-axis','l-add','l-prism','l-base',
+    'pd','pd-near','bvd','notes'];
+  fields.forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.value = '';
+  });
+  // Reset dropdowns to defaults
+  const testType = document.getElementById('test-type');
+  if(testType) testType.value = 'standard';
+  const recLens = document.getElementById('recommended-lens');
+  if(recLens) recLens.value = 'single_vision';
+  // Reset recall to 12 months
+  recallMonths = 12;
+  // fix: pills use class 'recall-pill', activate the 1-year pill
+  document.querySelectorAll('.recall-pill').forEach(p => {
+    const months = parseInt(p.getAttribute('onclick')?.match(/setRecall\\((\\d+)/)?.[1]);
+    p.classList.toggle('active', months === 12);
+  });
+  // hide custom row
+  const customRowClear = document.getElementById('recall-custom-row');
+  if (customRowClear) customRowClear.style.display = 'none';
+  updateRecallSummary();
+  // Reset consents to checked
+  const c1 = document.getElementById('consent-recall');
+  if(c1) c1.checked = true;
+  // Restore PDF extraction zone
+  const extractCard = document.getElementById('extract-card');
+  if (extractCard) extractCard.style.display = 'block';
+  const extractResult = document.getElementById('extract-result');
+  if (extractResult) extractResult.style.display = 'none';
+  const extractStatus = document.getElementById('extract-status');
+  if (extractStatus) extractStatus.style.display = 'none';
+
+  // Hide result card
+  document.getElementById('issue-result').style.display = 'none';
+  document.getElementById('issue-result').innerHTML = '';
+  document.getElementById('issue-status').textContent = '';
+  // Scroll to top of form
+  document.getElementById('pt-name')?.focus();
+  showTab('issue');
+}
+
+// ═══════════════ VERIFY ═══════════════
+function loadIssuedIntoVerifier(){
+  if(!STATE.lastIssuedRx){alert('No prescription issued yet.');return;}
+  document.getElementById('verify-input').value=JSON.stringify(STATE.lastIssuedRx,null,2);
+}
+async function verifyPrescription(){
+  const raw=document.getElementById('verify-input').value.trim();
+  if(!raw)return;
+  const el=document.getElementById('verify-result');
+  try{
+    let parsed=JSON.parse(raw);
+    if(document.getElementById('tamper-check').checked&&parsed.rx?.right?.sphere!=null){
+      parsed=JSON.parse(JSON.stringify(parsed));
+      parsed.rx.right.sphere=(parsed.rx.right.sphere||0)+1.0;
+    }
+    const{sig_optometrist,sig_practice,...payload}=parsed;
+    const now=Math.floor(Date.now()/1000);
+    const checks=[];
+
+    const schOk=payload.schema_version==='rxv1-uk';
+    checks.push({label:'Schema version',ok:schOk,value:payload.schema_version||'missing'});
+    const expOk=payload.expires_at>now;
+    checks.push({label:'Not expired',ok:expOk,value:tsD(payload.expires_at)});
+    const presOk=!!(payload.prescriber?.pubkey&&payload.prescriber?.goc);
+    checks.push({label:'Prescriber fields present',ok:presOk,value:presOk?\`\${payload.prescriber.name} · GOC \${payload.prescriber.goc}\`:'Missing'});
+    const regOD=REGISTRY.optometrists[payload.prescriber?.pubkey];
+    checks.push({label:'OD pubkey in registry',ok:!!regOD,value:regOD?\`\${regOD.status==='approved'?'✓ Approved':'⚠ Pending'} · \${regOD.goc}\`:'Not found (run demo: approve in Register tab)'});
+    const recallOk=!!payload.recall?.months&&!!payload.recall?.due_date;
+    checks.push({label:'Recall period signed',ok:recallOk,value:recallOk?\`\${payload.recall.months} months · due \${payload.recall.due_date}\`:'Not present'});
+
+    let sigODValid=false;
+    try{sigODValid=await verifyJ(payload,sig_optometrist,payload.prescriber.pubkey);}catch(e){}
+    checks.push({label:'OD cryptographic signature',ok:sigODValid,value:sigODValid?'Valid secp256k1/Schnorr/SHA-256':'✗ INVALID — tampered'});
+
+    let sigPracValid=null;
+    if(sig_practice&&payload.practice?.pubkey){
+      try{sigPracValid=await verifyJ(payload,sig_practice,payload.practice.pubkey);}catch(e){sigPracValid=false;}
+      checks.push({label:'Practice co-signature',ok:sigPracValid,value:sigPracValid?\`Valid · \${payload.practice.name}\`:'✗ INVALID'});
+    }
+
+    if(payload.delegation){
+      const delOk=payload.delegation.valid_until>=new Date().toISOString().split('T')[0];
+      checks.push({label:'Delegation certificate valid',ok:delOk,value:delOk?\`Until \${payload.delegation.valid_until}\`:\`Expired \${payload.delegation.valid_until}\`});
+    }
+
+    const allOk=schOk&&expOk&&presOk&&sigODValid;
+    el.innerHTML=\`<div class="card" style="border-color:\${allOk?'rgba(45,106,79,0.4)':'rgba(155,34,38,0.4)'};">
+      <div class="card-title">Verification Result</div>
+      <div class="badge \${allOk?'badge-valid':'badge-invalid'}" style="margin-bottom:18px;font-size:11px;padding:7px 13px;">
+        \${allOk?'✓ Authentic &amp; Unmodified':'✗ Verification Failed — Do Not Dispense'}
+      </div>
+      <div class="check-list">
+        \${checks.map(c=>\`<div class="check-item">
+          <span style="color:\${c.ok?'var(--green)':'var(--red)'};width:16px;text-align:center;">\${c.ok?'✓':'✗'}</span>
+          <span class="check-label">\${c.label}</span>
+          <span class="check-value" style="color:\${c.ok?'var(--ink)':'var(--red)'}">\${c.value}</span>
+        </div>\`).join('')}
+      </div>
+      \${allOk?\`
+      <div class="divider"></div>
+      <table class="rx-table">
+        <thead><tr><th style="text-align:left">Eye</th><th>Sphere</th><th>Cylinder</th><th>Axis</th><th>Add</th><th>Prism</th></tr></thead>
+        <tbody>
+          <tr><td class="eye-label">R (OD)</td><td>\${fmtR(payload.rx.right.sphere)}</td><td>\${fmtR(payload.rx.right.cylinder)}</td><td>\${fmtR(payload.rx.right.axis,'axis')}</td><td>\${fmtR(payload.rx.right.add)}</td><td>\${fmtR(payload.rx.right.prism)}</td></tr>
+          <tr><td class="eye-label">L (OS)</td><td>\${fmtR(payload.rx.left.sphere)}</td><td>\${fmtR(payload.rx.left.cylinder)}</td><td>\${fmtR(payload.rx.left.axis,'axis')}</td><td>\${fmtR(payload.rx.left.add)}</td><td>\${fmtR(payload.rx.left.prism)}</td></tr>
+        </tbody>
+      </table>
+      \${payload.recall?\`<div class="recall-band" style="margin-top:12px;"><span>📅</span><div>Recall due: <strong>\${payload.recall.due_date}</strong> (\${payload.recall.months} months)</div></div>\`:''}
+      \`:''}
+    </div>\`;
+  }catch(e){el.innerHTML=\`<div class="alert alert-error">Parse error: \${e.message}</div>\`;}
+}
+
+// ═══════════════ PATIENT VIEW ═══════════════
+function renderPatientView(){
+  const rx=STATE.lastIssuedRx;
+  if(!rx){
+    document.getElementById('no-rx-alert').style.display='block';
+    document.getElementById('patient-view-content').style.display='none';return;
+  }
+  document.getElementById('no-rx-alert').style.display='none';
+  document.getElementById('patient-view-content').style.display='block';
+
+  // Practice branding
+  if(rx.practice){
+    const ph=document.getElementById('pv-practice-header');
+    ph.style.borderBottomColor=rx.practice.colour||'var(--border)';
+    document.getElementById('pv-practice-logo').style.background=(rx.practice.colour||'#005f73')+'18';
+    document.getElementById('pv-practice-logo').style.color=rx.practice.colour||'#005f73';
+    document.getElementById('pv-practice-logo').textContent=rx.practice.emoji||'👁';
+    document.getElementById('pv-practice-name').textContent=rx.practice.name||'—';
+    document.getElementById('pv-practice-addr').textContent=\`\${rx.practice.addr1||''}, \${rx.practice.addr2||''} · \${rx.practice.reg||''}\`;
+  }
+
+  document.getElementById('pv-patient-name').textContent=rx.patient.display_name||'Patient';
+  document.getElementById('pv-issued-line').textContent=\`Issued \${tsD(rx.issued_at)} · \${rx.test_type?.replace('_',' ')||'Standard Sight Test'}\`;
+  document.getElementById('pv-prescriber').textContent=rx.prescriber.name;
+  document.getElementById('pv-goc').textContent=rx.prescriber.goc;
+  document.getElementById('pv-expires').textContent=tsD(rx.expires_at);
+  document.getElementById('pv-testtype').textContent=rx.test_type?.replace('_',' ')||'Standard Sight Test';
+  document.getElementById('pv-sig').textContent=shortH(rx.sig_optometrist,30);
+
+  document.getElementById('pv-rx-body').innerHTML=\`
+    <tr><td class="eye-label">R (OD)</td><td>\${fmtR(rx.rx.right.sphere)}</td><td>\${fmtR(rx.rx.right.cylinder)}</td><td>\${fmtR(rx.rx.right.axis,'axis')}</td><td>\${fmtR(rx.rx.right.add)}</td></tr>
+    <tr><td class="eye-label">L (OS)</td><td>\${fmtR(rx.rx.left.sphere)}</td><td>\${fmtR(rx.rx.left.cylinder)}</td><td>\${fmtR(rx.rx.left.axis,'axis')}</td><td>\${fmtR(rx.rx.left.add)}</td></tr>\`;
+
+  const extras=[];
+  if(rx.rx.pd) extras.push(\`PD: \${rx.rx.pd}mm\`);
+  if(rx.rx.pd_near) extras.push(\`Near PD: \${rx.rx.pd_near}mm\`);
+  if(rx.rx.bvd) extras.push(\`BVD: \${rx.rx.bvd}mm\`);
+  if(rx.rx.recommended_lens) extras.push(\`Lens: \${rx.rx.recommended_lens.replace('_',' ')}\`);
+  if(rx.rx.notes) extras.push(rx.rx.notes);
+  document.getElementById('pv-extras').textContent=extras.join('  ·  ');
+
+  if(rx.recall){
+    document.getElementById('pv-recall-band').style.display='flex';
+    document.getElementById('pv-recall-text').textContent=\`Next sight test recommended by \${rx.recall.due_date} (\${rx.recall.months} months)\`;
+    document.getElementById('pv-recall-badge').style.display='inline-flex';
+    document.getElementById('pv-recall-badge').textContent=\`📅 Recall \${rx.recall.due_date}\`;
+  }
+
+  if(rx.sig_practice){
+    document.getElementById('pv-dual-sig').style.display='block';
+    document.getElementById('pv-dual-sig-detail').textContent=\`OD: \${shortH(rx.sig_optometrist,16)} · Practice: \${shortH(rx.sig_practice,16)}\`;
+  }
+
+  const qrEl=document.getElementById('qr-container'); qrEl.innerHTML='';
+  try{
+    // Encode full payload as base64 — matches /v/:code#base64 format that
+    // the verification page decodes. Use btoa(unescape(encodeURIComponent(...)))
+    // for Unicode safety (handles · and other non-ASCII chars in practice names).
+    const shortCode = rx.prescription_id || '';
+    const baseUrl = \`\${API_URL}/v/\${shortCode}\`;
+    const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(rx))));
+    const qrUrl = \`\${baseUrl}#\${encoded}\`;
+    // Use error correction L for maximum data capacity
+    new QRCode(qrEl,{text:qrUrl,
+      width:148,height:148,colorDark:'#1a1a2e',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.L});
+  }catch(e){
+    // If still too large (very long notes/address), fall back to short URL only
+    const shortCode = rx.prescription_id || '';
+    try {
+      new QRCode(qrEl,{text:\`\${API_URL}/v/\${shortCode}\`,
+        width:148,height:148,colorDark:'#1a1a2e',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});
+      qrEl.insertAdjacentHTML('beforeend','<div style="font-family:\\'DM Mono\\',monospace;font-size:8px;color:var(--muted);text-align:center;margin-top:5px;max-width:148px;">Short URL only — scan then present PDF</div>');
+    } catch(e2) {
+      qrEl.innerHTML='<div style="font-family:\\'DM Mono\\',monospace;font-size:9px;color:var(--muted);width:148px;text-align:center;padding:10px;border:1px dashed var(--border);">QR unavailable.<br>Use JSON export.</div>';
+    }
+  }
+}
+function downloadRxJson(){
+  if(!STATE.lastIssuedRx)return;
+  const a=document.createElement('a');
+  a.href='data:application/json;charset=utf-8,'+encodeURIComponent(JSON.stringify(STATE.lastIssuedRx,null,2));
+  a.download=\`rx-\${STATE.lastIssuedRx.patient.ref.slice(0,8)}-\${STATE.lastIssuedRx.issued_at}.json\`;
+  a.click();
+}
+
+// ═══════════════ REGISTRY TAB ═══════════════
+function renderRegistryTab(){
+  // Optometrists
+  const ods=Object.values(REGISTRY.optometrists);
+  document.getElementById('reg-od-wrap').innerHTML=ods.length?\`
+    <table class="registry-table">
+      <thead><tr><th>GOC No.</th><th>Name</th><th>Pubkey</th><th>Email Verified</th><th>ID Verified</th><th>Status</th></tr></thead>
+      <tbody>\${ods.map(o=>\`<tr>
+        <td style="color:var(--ink2);font-weight:500;">\${o.goc}</td>
+        <td>\${o.name}</td>
+        <td style="font-size:9px;color:var(--muted);cursor:pointer;" onclick="navigator.clipboard?.writeText('\${o.pubHex}');this.textContent='Copied!';setTimeout(()=>this.textContent='\${shortH(o.pubHex,12)}',1400)">\${shortH(o.pubHex,12)}</td>
+        <td style="text-align:center;color:var(--green);">✓</td>
+        <td style="text-align:center;color:\${o.status==='approved'?'var(--green)':'var(--amber)'};">\${o.status==='approved'?'✓':'Pending'}</td>
+        <td><span class="badge \${o.status==='approved'?'badge-valid':o.status==='pending'?'badge-pending':'badge-warn'}">\${o.status}</span></td>
+      </tr>\`).join('')}</tbody>
+    </table>\`
+    :'<div style="font-family:\\'DM Mono\\',monospace;font-size:11px;color:var(--muted);padding:18px;text-align:center;border:1px dashed var(--border);border-radius:2px;">No entries yet.</div>';
+
+  // Practices
+  const pracs=Object.values(REGISTRY.practices);
+  document.getElementById('reg-practice-wrap').innerHTML=pracs.length?\`
+    <table class="registry-table">
+      <thead><tr><th>Practice</th><th>Reg. No.</th><th>Address</th><th>Pubkey</th><th>Status</th></tr></thead>
+      <tbody>\${pracs.map(p=>\`<tr>
+        <td><span style="margin-right:6px;">\${p.emoji}</span>\${p.name}</td>
+        <td style="font-size:10px;">\${p.reg}</td>
+        <td style="font-size:10px;color:var(--muted);">\${p.addr1}, \${p.addr2}</td>
+        <td style="font-size:9px;color:var(--muted);cursor:pointer;" onclick="navigator.clipboard?.writeText('\${p.pubHex}');this.textContent='Copied!';setTimeout(()=>this.textContent='\${shortH(p.pubHex,12)}',1400)">\${shortH(p.pubHex,12)}</td>
+        <td><span class="badge badge-valid">Active</span></td>
+      </tr>\`).join('')}</tbody>
+    </table>\`
+    :'<div style="font-family:\\'DM Mono\\',monospace;font-size:11px;color:var(--muted);padding:18px;text-align:center;border:1px dashed var(--border);border-radius:2px;">No practices registered yet.</div>';
+
+  // Delegations
+  document.getElementById('reg-deleg-wrap').innerHTML=REGISTRY.delegations.length?\`
+    <table class="registry-table">
+      <thead><tr><th>Optometrist</th><th>Practice</th><th>Valid From</th><th>Valid Until</th><th>OD Sig</th><th>Practice Sig</th></tr></thead>
+      <tbody>\${REGISTRY.delegations.map(d=>\`<tr>
+        <td style="font-size:10px;">\${d.optometrist?.name}<br><span style="color:var(--muted);font-size:9px;">GOC \${d.optometrist?.goc}</span></td>
+        <td style="font-size:10px;">\${d.practice?.name}</td>
+        <td style="font-size:10px;">\${d.valid_from}</td>
+        <td style="font-size:10px;color:\${d.valid_until>=new Date().toISOString().split('T')[0]?'var(--green)':'var(--red)'};">\${d.valid_until}</td>
+        <td style="font-size:9px;color:var(--green);">✓ \${shortH(d.sig_optometrist,8)}</td>
+        <td style="font-size:9px;color:var(--green);">✓ \${shortH(d.sig_practice,8)}</td>
+      </tr>\`).join('')}</tbody>
+    </table>\`
+    :'<div style="font-family:\\'DM Mono\\',monospace;font-size:11px;color:var(--muted);padding:18px;text-align:center;border:1px dashed var(--border);border-radius:2px;">No delegation certificates issued yet.</div>';
+}
+
+function doLookup(){
+  const q=document.getElementById('lookup-q').value.trim();
+  const el=document.getElementById('lookup-result');
+  const od=Object.values(REGISTRY.optometrists).find(o=>o.goc===q||o.pubHex===q||o.goc?.replace(/-/g,'')===q.replace(/-/g,''));
+  const pr=Object.values(REGISTRY.practices).find(p=>p.id===q||p.pubHex===q||p.reg===q);
+  if(!od&&!pr){
+    el.innerHTML=\`<div class="alert alert-warn">No entry found for "\${q}".<br><span style="font-size:9px;">In production this queries the live RxVerify API. Complete the Register + Practice tabs first.</span></div>\`;return;
+  }
+  const deleg=od?REGISTRY.delegations.filter(d=>d.odPubHex===od.pubHex):[];
+  el.innerHTML=\`<div class="card" style="border-color:rgba(45,106,79,0.35);margin-top:12px;">
+    \${od?\`<div class="badge badge-valid" style="margin-bottom:12px;">✓ GOC Optometrist Found</div>
+    <div style="font-family:'DM Mono',monospace;font-size:11px;line-height:2.0;">
+      <div>Name: <strong>\${od.name}</strong></div><div>GOC: <strong>\${od.goc}</strong></div>
+      <div>Status: <span style="color:\${od.status==='approved'?'var(--green)':'var(--amber)'};">\${od.status}</span></div>
+      <div style="margin-top:8px;font-size:9px;">Pubkey: <span style="color:var(--muted);word-break:break-all;">\${od.pubHex}</span></div>
+      \${deleg.length?\`<div style="margin-top:8px;">Active delegations: <span style="color:var(--teal2);">\${deleg.map(d=>d.practice.name).join(', ')}</span></div>\`:''}
+    </div>
+    <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:10px;padding:9px;background:var(--warm);border-radius:2px;">
+      Cross-check: search GOC number <strong>\${od.goc}</strong> at <strong>optical.org/goc/registrants</strong>
+    </div>\`:''}
+    \${pr?\`<div class="badge badge-info" style="margin-bottom:12px;">✓ Practice Found</div>
+    <div style="font-family:'DM Mono',monospace;font-size:11px;line-height:2.0;">
+      <div>Name: <strong>\${pr.name}</strong></div><div>Reg: <strong>\${pr.reg}</strong></div>
+      <div>Address: \${pr.addr1}, \${pr.addr2}</div>
+    </div>\`:''}
+  </div>\`;
+}
+
+// ═══════════════ EXPOSE TO WINDOW ═══════════════
+// ES module functions are scoped — expose all UI-callable
+// functions to window so onclick= handlers can reach them
+Object.assign(window, {
+  showTab, setRecall, updateRecallSummary,
+  goWizard, generateKeys, copyEl, downloadKeys,
+  saveKeysToStorage, loadSavedKeys,
+  simulateSendCode, verifyOTP,
+  simulateUpload, submitForVerification, approveDemo,
+  registerPractice, addDemoPractices, refreshPracticeTab,
+  setActivePractice, issueDelegation,
+  refreshIssueTab, updateIssueBanner, issuePrescription,
+  clearIssueForm, handlePDFDrop, handlePDFFile, applyExtraction,
+  setNum, setText, setDOB, setAxis,
+  loadIssuedIntoVerifier, verifyPrescription,
+  renderPatientView, downloadRxJson,
+  renderRegistryTab, doLookup,
+});
+
+// ═══════════════ INIT ═══════════════
+window.addEventListener('load',()=>{
+  updateRecallSummary();
+  const saved=localStorage.getItem('rxverify_state');
+  if(saved){
+    try{
+      const s=JSON.parse(saved);
+      if(s.pubHex&&s.privHex&&s.prescriber){
+        Object.assign(STATE,s);
+        setEl('pub-key-display',shortH(s.pubHex,20),s.pubHex);
+        setEl('priv-key-display',shortH(s.privHex,20),s.privHex);
+        document.getElementById('keys-card').style.display='block';
+        document.getElementById('setup-name').value=s.prescriber.name||'';
+        document.getElementById('setup-goc').value=s.prescriber.goc||'';
+        if(s.prescriber.email) document.getElementById('setup-email').value=s.prescriber.email;
+        if(s.prescriber) REGISTRY.optometrists[s.pubHex]={...s.prescriber,status:s.registryStatus||'unverified',registeredAt:new Date().toISOString()};
+        updateHeader();
+        document.querySelectorAll('.wstep').forEach(ws=>ws.classList.add('done'));
+        // Auto-register in Supabase on every load to keep registry current
+        fetch(\`\${API_URL}/api/registry/auto-register\`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            npub: s.pubHex,
+            goc_number: s.prescriber.goc,
+            name: s.prescriber.name,
+            practice: s.prescriber.practice || null,
+            jurisdiction: 'UK-GOC'
+          })
+        }).then(() => {
+          STATE.registryStatus = 'approved';
+          updateHeader();
+        }).catch(() => {});
+      }
+    }catch(e){}
+  }
+});
+</script>
+</body>
+</html>
+`;const n=parseFloat(v);return n>=0?\`+\${n.toFixed(2)}\`:n.toFixed(2);}
 
 // ═══════════════ RECALL ═══════════════
 function setRecall(val,el){
