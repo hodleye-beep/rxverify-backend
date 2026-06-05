@@ -12,6 +12,7 @@ const express    = require('express');
 const { recallCronRoute } = require('./recall-scheduler');
 const cors       = require('cors');
 const crypto     = require('crypto');
+const path       = require('path');
 const { createClient } = require('@supabase/supabase-js');
 const { Resend } = require('resend');
 const Anthropic  = require('@anthropic-ai/sdk');
@@ -27,7 +28,26 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '10mb' }));
 
-// ── Clients ────────────────────────────────────────────
+// ── Serve static frontend ──────────────────────────────
+// Serves rxverify-uk.html at / and any other static assets
+app.use(express.static(path.join(__dirname, 'public')));
+
+// ── Auth check endpoint ────────────────────────────────
+// Simple password gate — password set via RXVERIFY_PASSWORD env var
+app.post('/api/auth/check', (req, res) => {
+  const { password } = req.body;
+  const correct = process.env.RXVERIFY_PASSWORD;
+  if (!correct) return res.status(500).json({ ok: false, error: 'Password not configured' });
+  if (password === correct) {
+    res.json({ ok: true });
+  } else {
+    res.status(401).json({ ok: false });
+  }
+});
+
+// ── Serve frontend for all non-API routes ──────────────
+// Must come AFTER all /api routes
+
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
@@ -1489,6 +1509,16 @@ function fmtVal(v) {
 
 // ── Recall notification cron ──
 recallCronRoute(app);
+
+// ── Catch-all: serve frontend for non-API routes ──────
+// Handles /v/:code and any direct URL navigation
+app.get('*', (req, res) => {
+  if (!req.path.startsWith('/api') && !req.path.startsWith('/widget')) {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  } else {
+    res.status(404).json({ error: 'Not found' });
+  }
+});
 
 // ═══════════════════════════════════════════════════════
 // START
