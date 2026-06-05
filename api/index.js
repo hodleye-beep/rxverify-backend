@@ -81,11 +81,11 @@ function sha256hex(str) {
 // ═══════════════════════════════════════════════════════
 // HEALTH
 // ═══════════════════════════════════════════════════════
-app.get('/', (req, res) => res.json({
+app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
+app.get('/api/status', (req, res) => res.json({
   service: 'RxVerify API', version: '2.0.0',
   status: 'operational', timestamp: new Date().toISOString()
 }));
-app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
 // ═══════════════════════════════════════════════════════
 // STORE PRESCRIPTION — hash only, zero clinical data
@@ -1533,3 +1533,5 @@ app.listen(PORT, () => {
   console.log(`Verify endpoint: POST /api/verify`);
   console.log(`Retailer widget: GET /widget.js`);
 });
+
+module.exports = app;
